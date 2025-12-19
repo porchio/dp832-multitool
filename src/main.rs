@@ -213,67 +213,24 @@ impl ScpiConnection {
 fn send(stream: &mut TcpStream, cmd: &str) {
     let cmd = format!("{}\n", cmd);
     stream.write_all(cmd.as_bytes()).unwrap();
-    stream.flush().unwrap();  // Ensure data is sent immediately
-}
-
-fn drain_buffer(stream: &mut TcpStream) {
-    // Drain any leftover data in the buffer to prevent response bleed
-    let mut buf = [0u8; 256];
-    let timeout = std::time::Duration::from_millis(100);
-    let start = std::time::Instant::now();
-    
-    while start.elapsed() < timeout {
-        match stream.read(&mut buf) {
-            Ok(0) => break,  // Connection closed
-            Ok(_) => continue,  // Keep draining
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,  // No more data
-            Err(_) => break,
-        }
-    }
 }
 
 fn query(stream: &mut TcpStream, cmd: &str) -> String {
     send(stream, cmd);
-    
-    // Delay to let device process command
-    // Longer delay for *IDN? as it returns more data
-    let delay = if cmd.starts_with("*IDN") {
-        std::time::Duration::from_millis(100)
-    } else {
-        std::time::Duration::from_millis(50)
-    };
-    std::thread::sleep(delay);
-    
     let mut resp = Vec::new();
-    let mut buf = [0u8; 256];
-    let start = std::time::Instant::now();
-    
-    // Longer timeout for *IDN? queries
-    let timeout = if cmd.starts_with("*IDN") {
-        std::time::Duration::from_millis(500)
-    } else {
-        std::time::Duration::from_millis(300)
-    };
+    let mut buf = [0u8; 64];
 
     loop {
         match stream.read(&mut buf) {
-            Ok(0) => break,  // Connection closed
+            Ok(0) => break,
             Ok(n) => {
                 resp.extend_from_slice(&buf[..n]);
                 if resp.ends_with(b"\n") {
-                    break;  // Got complete response
+                    break;
                 }
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                // No data available yet, check timeout
-                if start.elapsed() >= timeout {
-                    break;  // Timeout reached
-                }
-                // Wait a bit and retry
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                continue;
-            }
-            Err(e) => panic!("TCP read error: {}", e),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(e) => panic!("{}", e),
         }
     }
 
@@ -359,8 +316,10 @@ fn main() {
     let addr = format!("{}:{}", ip, port);
     let stream = TcpStream::connect(&addr).unwrap();
 
-    // Set to non-blocking mode with manual timeout handling
-    stream.set_nonblocking(true).unwrap();
+    // Set blocking mode with 1 second read timeout (as in working version)
+    stream
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .unwrap();
 
     // Initialize shared state
     let state = Arc::new(Mutex::new(ui::RuntimeState {
@@ -379,14 +338,8 @@ fn main() {
     
     // Clear errors and get ID (now with logging)
     conn.send("*CLS");
-    std::thread::sleep(std::time::Duration::from_millis(50));
-    
     let idn = conn.query("*IDN?");
     println!("{}", idn);
-    
-    // Drain buffer and add delay after *IDN? to prevent response bleed
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    drain_buffer(&mut conn.stream);
 
     // Set up each channel
     for profile in &profiles {
@@ -438,15 +391,12 @@ fn simulate_channel(
         
         // Turn off output (use channel-specific command)
         c.send(&format!("OUTP CH{},OFF", profile.channel));
-        std::thread::sleep(std::time::Duration::from_millis(200));
         
         // Set current limit
         c.send(&format!("CURR {:.3}", profile.current_limit_discharge_a));
-        std::thread::sleep(std::time::Duration::from_millis(200));
         
         // Turn on output
         c.send(&format!("OUTP CH{},ON", profile.channel));
-        std::thread::sleep(std::time::Duration::from_millis(200));
         
         log_message!(state, writers, "CH{}: Initialized - {} ({:.1}Ah, {:.3}Ω)", 
                     profile.channel, 
