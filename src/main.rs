@@ -258,15 +258,15 @@ fn main() {
         ui::run_tui(tui_state, addr_clone);
     });
 
+    // Create shared TCP stream for all channels (mutex-protected)
+    let shared_stream = Arc::new(Mutex::new(stream));
+    
     // Start simulation threads for each channel
     let mut sim_threads = Vec::new();
     
     for profile in profiles {
         let state_clone = state.clone();
-        let stream_clone = TcpStream::connect(&addr).unwrap();
-        stream_clone
-            .set_read_timeout(Some(Duration::from_secs(1)))
-            .unwrap();
+        let stream_clone = shared_stream.clone();
         
         let csv_clone = csv_log.as_ref().map(|p| {
             let path = format!("{}_ch{}.csv", p.trim_end_matches(".csv"), profile.channel);
@@ -288,17 +288,20 @@ fn main() {
 
 fn simulate_channel(
     state: Arc<Mutex<ui::RuntimeState>>,
-    mut stream: TcpStream,
+    stream: Arc<Mutex<TcpStream>>,
     profile: BatteryProfile,
     mut csv: Option<csv::Writer<File>>,
 ) {
     let ch_idx = (profile.channel - 1) as usize;
     
     // Initialize channel
-    send(&mut stream, &format!("INST:NSEL {}", profile.channel));
-    send(&mut stream, "OUTP OFF");
-    send(&mut stream, &format!("CURR {}", profile.current_limit_discharge_a));
-    send(&mut stream, "OUTP ON");
+    {
+        let mut s = stream.lock().unwrap();
+        send(&mut s, &format!("INST:NSEL {}", profile.channel));
+        send(&mut s, "OUTP OFF");
+        send(&mut s, &format!("CURR {}", profile.current_limit_discharge_a));
+        send(&mut s, "OUTP ON");
+    }
 
     let mut soc = 1.0;
     let mut last = Instant::now();
@@ -309,9 +312,14 @@ fn simulate_channel(
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        let i: f64 = query(&mut stream, "MEAS:CURR?")
-            .parse()
-            .unwrap_or(0.0);
+        // Lock stream, select channel, and query current
+        let i: f64 = {
+            let mut s = stream.lock().unwrap();
+            send(&mut s, &format!("INST:NSEL {}", profile.channel));
+            query(&mut s, "MEAS:CURR?")
+                .parse()
+                .unwrap_or(0.0)
+        };
 
         // Discharge / charge integration
         soc -= i * dt / (profile.capacity_ah * 3600.0);
@@ -328,7 +336,9 @@ fn simulate_channel(
 
         if v_filt <= profile.cutoff_voltage {
             println!("Channel {}: Cutoff reached", profile.channel);
-            send(&mut stream, "OUTP OFF");
+            let mut s = stream.lock().unwrap();
+            send(&mut s, &format!("INST:NSEL {}", profile.channel));
+            send(&mut s, "OUTP OFF");
             break;
         }
 
@@ -336,7 +346,12 @@ fn simulate_channel(
             v_filt = profile.max_voltage;
         }
 
-        send(&mut stream, &format!("VOLT {:.3}", v_filt));
+        // Lock stream, select channel, and set voltage
+        {
+            let mut s = stream.lock().unwrap();
+            send(&mut s, &format!("INST:NSEL {}", profile.channel));
+            send(&mut s, &format!("VOLT {:.3}", v_filt));
+        }
 
         if let Some(w) = csv.as_mut() {
             w.write_record(&[
@@ -363,7 +378,9 @@ fn simulate_channel(
         }
 
         if !state.lock().unwrap().running {
-            send(&mut stream, "OUTP OFF");
+            let mut s = stream.lock().unwrap();
+            send(&mut s, &format!("INST:NSEL {}", profile.channel));
+            send(&mut s, "OUTP OFF");
             break;
         }
 
