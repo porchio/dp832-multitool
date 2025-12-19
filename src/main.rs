@@ -332,12 +332,12 @@ fn simulate_channel(
 ) {
     let ch_idx = (profile.channel - 1) as usize;
     
-    // Initialize channel - use channel-specific commands to avoid race conditions
+    // Initialize channel - select it once and then use simple commands
     let init_cmds = [
-        format!("OUTP CH{},OFF", profile.channel),
         format!("INST:NSEL {}", profile.channel),
+        "OUTP OFF".to_string(),
         format!("CURR {:.3}", profile.current_limit_discharge_a),
-        format!("OUTP CH{},ON", profile.channel),
+        "OUTP ON".to_string(),
     ];
     
     for cmd in &init_cmds {
@@ -362,10 +362,10 @@ fn simulate_channel(
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        // Query current directly using channel-specific command (no channel switching needed)
-        let curr_cmd = format!("MEAS:CURR? CH{}", profile.channel);
+        // Query current using simple command (channel already selected at init)
+        let curr_cmd = "MEAS:CURR?";
         log_scpi!(state, writers, "CH{} → {}", profile.channel, curr_cmd);
-        let curr_str = query(&mut stream, &curr_cmd);
+        let curr_str = query(&mut stream, curr_cmd);
         log_scpi!(state, writers, "CH{} ← {}", profile.channel, curr_str.trim());
         
         let curr_result: Result<f64, String> = curr_str.trim().parse().map_err(|_| curr_str.clone());
@@ -385,9 +385,8 @@ fn simulate_channel(
                     log_message!(state, writers, "CH{}: Too many consecutive errors. Stopping simulation for safety.", 
                                 profile.channel);
                     // Turn off output for safety
-                    let cmd = format!("OUTP CH{},OFF", profile.channel);
-                    log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
-                    send(&mut stream, &cmd);
+                    log_scpi!(state, writers, "CH{} → OUTP OFF", profile.channel);
+                    send(&mut stream, "OUTP OFF");
                     break;
                 }
                 
@@ -412,9 +411,8 @@ fn simulate_channel(
 
         if v_filt <= profile.cutoff_voltage {
             log_message!(state, writers, "CH{}: Cutoff voltage reached ({:.3}V)", profile.channel, v_filt);
-            let cmd = format!("OUTP CH{},OFF", profile.channel);
-            log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
-            send(&mut stream, &cmd);
+            log_scpi!(state, writers, "CH{} → OUTP OFF", profile.channel);
+            send(&mut stream, "OUTP OFF");
             break;
         }
 
@@ -422,16 +420,10 @@ fn simulate_channel(
             v_filt = profile.max_voltage;
         }
 
-        // Set voltage - requires channel selection
-        let volt_cmds = [
-            format!("INST:NSEL {}", profile.channel),
-            format!("VOLT {:.3}", v_filt),
-        ];
-        
-        for cmd in &volt_cmds {
-            log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
-            send(&mut stream, cmd);
-        }
+        // Set voltage - channel already selected, just send VOLT command
+        let volt_cmd = format!("VOLT {:.3}", v_filt);
+        log_scpi!(state, writers, "CH{} → {}", profile.channel, volt_cmd);
+        send(&mut stream, &volt_cmd);
 
         if let Some(w) = csv.as_mut() {
             w.write_record(&[
@@ -458,9 +450,8 @@ fn simulate_channel(
         }
 
         if !state.lock().unwrap().running {
-            let cmd = format!("OUTP CH{},OFF", profile.channel);
-            log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
-            send(&mut stream, &cmd);
+            log_scpi!(state, writers, "CH{} → OUTP OFF", profile.channel);
+            send(&mut stream, "OUTP OFF");
             break;
         }
 
