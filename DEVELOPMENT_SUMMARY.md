@@ -126,6 +126,13 @@ All requested features have been successfully implemented and committed to the r
 - All SCPI commands automatically terminated with `\n`
 - Ensures proper command parsing by PSU
 
+### 14. **Optimized: Channel-Specific SCPI Commands** ✓
+- **Commit**: `1a39538` - "Optimize SCPI communication: use channel-specific MEAS commands"
+- Uses `MEAS:CURR? CH1` instead of switching channels first
+- Reduces SCPI traffic by eliminating unnecessary `INST:NSEL` commands
+- Voltage setting still requires channel selection as per DP832 protocol
+- Significantly improves communication efficiency for multi-channel operation
+
 ## 📁 Project Structure
 
 ```
