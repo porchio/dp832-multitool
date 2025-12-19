@@ -300,10 +300,13 @@ fn main() {
         let writers_clone = writers.clone();
         
         // Create separate TCP stream for this channel (key to avoiding Command errors!)
-        let stream_clone = TcpStream::connect(&addr).unwrap();
+        let mut stream_clone = TcpStream::connect(&addr).unwrap();
         stream_clone
             .set_read_timeout(Some(Duration::from_secs(1)))
             .unwrap();
+        
+        // Clear any errors on this connection before starting
+        send(&mut stream_clone, "*CLS");
         
         let csv_clone = csv_log.as_ref().map(|p| {
             let path = format!("{}_ch{}.csv", p.trim_end_matches(".csv"), profile.channel);
