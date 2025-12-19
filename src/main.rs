@@ -9,8 +9,6 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use ui::RuntimeState;
-
 #[derive(Parser)]
 struct Args {
     /// Config file (TOML)
@@ -25,9 +23,9 @@ struct Args {
     #[arg(long)]
     port: Option<u16>,
 
-    /// Battery profile JSON
+    /// Battery profile JSON files (can specify multiple, e.g., -p ch1.json -p ch2.json)
     #[arg(short, long)]
-    profile: Option<String>,
+    profile: Vec<String>,
 
     /// CSV log file
     #[arg(long)]
@@ -171,6 +169,7 @@ fn main() {
     let args = Args::parse();
 
     let cfg = load_optional_config(args.config.as_deref());
+    
     // Resolve IP
     let ip = args
         .ip
@@ -183,29 +182,47 @@ fn main() {
         .or_else(|| cfg.device.as_ref().and_then(|d| d.port))
         .unwrap_or(5555);
 
-    // Resolve battery profile
-    let profile_path = args
-        .profile
-        .or_else(|| cfg.battery.map(|b| b.profile))
-        .expect("Battery profile not specified");
+    // Resolve battery profiles
+    let mut profile_paths = args.profile;
+    if profile_paths.is_empty() {
+        if let Some(battery_cfg) = cfg.battery {
+            profile_paths.push(battery_cfg.profile);
+        }
+    }
+
+    if profile_paths.is_empty() {
+        eprintln!("Error: No battery profile specified");
+        eprintln!("Use: -p <profile.json> (can specify multiple times for multiple channels)");
+        std::process::exit(1);
+    }
+
+    // Load all profiles
+    let mut profiles = Vec::new();
+    for profile_path in &profile_paths {
+        let mut json = String::new();
+        File::open(profile_path)
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to open profile {}: {}", profile_path, e);
+                std::process::exit(1);
+            })
+            .read_to_string(&mut json)
+            .unwrap();
+
+        let profile: BatteryProfile = serde_json::from_str(&json)
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to parse profile {}: {}", profile_path, e);
+                std::process::exit(1);
+            });
+        
+        println!("Loaded profile '{}' for channel {}", profile.name, profile.channel);
+        profiles.push(profile);
+    }
 
     // Resolve CSV log
-    let csv_log = args
-        .log
-        .or_else(|| cfg.logging.and_then(|l| l.csv));
+    let csv_log = args.log.or_else(|| cfg.logging.and_then(|l| l.csv));
 
     println!("DP832: {}:{}", ip, port);
-    println!("Profile: {}", profile_path);
-
-    let mut json = String::new();
-    File::open(&profile_path)
-        .unwrap()
-        .read_to_string(&mut json)
-        .unwrap();
-
-    let profile: BatteryProfile = serde_json::from_str(&json).unwrap();
-    println!("Loaded profile: {}", profile.name);
-
+    println!("Active channels: {}", profiles.len());
 
     let addr = format!("{}:{}", ip, port);
     let mut stream = TcpStream::connect(&addr).unwrap();
@@ -217,38 +234,75 @@ fn main() {
     send(&mut stream, "*CLS");
     println!("{}", query(&mut stream, "*IDN?"));
 
+    // Initialize shared state
+    let state = Arc::new(Mutex::new(ui::RuntimeState {
+        channels: Default::default(),
+        running: true,
+    }));
+
+    // Set up each channel
+    for profile in &profiles {
+        let ch_idx = (profile.channel - 1) as usize;
+        if ch_idx < 3 {
+            let mut s = state.lock().unwrap();
+            s.channels[ch_idx].enabled = true;
+            s.channels[ch_idx].soc = 1.0;
+            s.channels[ch_idx].profile_name = profile.name.clone();
+        }
+    }
+
+    // Start TUI
+    let tui_state = state.clone();
+    let addr_clone = addr.clone();
+    std::thread::spawn(move || {
+        ui::run_tui(tui_state, addr_clone);
+    });
+
+    // Start simulation threads for each channel
+    let mut sim_threads = Vec::new();
+    
+    for profile in profiles {
+        let state_clone = state.clone();
+        let stream_clone = TcpStream::connect(&addr).unwrap();
+        stream_clone
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        
+        let csv_clone = csv_log.as_ref().map(|p| {
+            let path = format!("{}_ch{}.csv", p.trim_end_matches(".csv"), profile.channel);
+            csv::Writer::from_path(path).unwrap()
+        });
+
+        let thread = std::thread::spawn(move || {
+            simulate_channel(state_clone, stream_clone, profile, csv_clone);
+        });
+        
+        sim_threads.push(thread);
+    }
+
+    // Wait for all simulation threads to complete
+    for thread in sim_threads {
+        thread.join().unwrap();
+    }
+}
+
+fn simulate_channel(
+    state: Arc<Mutex<ui::RuntimeState>>,
+    mut stream: TcpStream,
+    profile: BatteryProfile,
+    mut csv: Option<csv::Writer<File>>,
+) {
+    let ch_idx = (profile.channel - 1) as usize;
+    
+    // Initialize channel
     send(&mut stream, &format!("INST:NSEL {}", profile.channel));
     send(&mut stream, "OUTP OFF");
-    send(
-        &mut stream,
-        &format!("CURR {}", profile.current_limit_discharge_a),
-    );
-
+    send(&mut stream, &format!("CURR {}", profile.current_limit_discharge_a));
     send(&mut stream, "OUTP ON");
 
     let mut soc = 1.0;
     let mut last = Instant::now();
     let mut v_filt = interpolate_ocv(&profile.ocv_curve, soc);
-
-    let mut csv = csv_log.map(|p| csv::Writer::from_path(p).unwrap());
-
-    let addr = format!("{}:{}", ip, port);
-
-    let state = Arc::new(Mutex::new(RuntimeState {
-        soc: 1.0,
-        running: true,
-        ..Default::default()
-    }));
-    let tui_state = state.clone();
-    let profile_name = profile.name.clone();
-    let addr_clone = addr.clone();
-
-    std::thread::spawn(move || {
-        ui::run_tui(tui_state, profile_name, addr_clone);
-    });
-
-
-    let sim_state = state.clone();
 
     loop {
         let now = Instant::now();
@@ -273,7 +327,7 @@ fn main() {
         v_filt += alpha * (v_target - v_filt);
 
         if v_filt <= profile.cutoff_voltage {
-            println!("Cutoff reached");
+            println!("Channel {}: Cutoff reached", profile.channel);
             send(&mut stream, "OUTP OFF");
             break;
         }
@@ -296,20 +350,25 @@ fn main() {
             w.flush().unwrap();
         }
 
+        // Update shared state
         {
-            let mut s = sim_state.lock().unwrap();
-            s.soc = soc;
-            s.voltage = v_filt;
-            s.current = i;
-            s.power = v_filt * i;
-            s.ocv = voc;
+            let mut s = state.lock().unwrap();
+            if ch_idx < 3 {
+                s.channels[ch_idx].soc = soc;
+                s.channels[ch_idx].voltage = v_filt;
+                s.channels[ch_idx].current = i;
+                s.channels[ch_idx].power = v_filt * i;
+                s.channels[ch_idx].ocv = voc;
+            }
         }
 
-        if !sim_state.lock().unwrap().running {
+        if !state.lock().unwrap().running {
             send(&mut stream, "OUTP OFF");
             break;
         }
 
         sleep(Duration::from_millis(profile.update_interval_ms));
     }
+    
+    println!("Channel {} simulation stopped", profile.channel);
 }
