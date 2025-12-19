@@ -208,14 +208,30 @@ fn send(stream: &mut TcpStream, cmd: &str) {
     stream.flush().unwrap();  // Ensure data is sent immediately
 }
 
+fn drain_buffer(stream: &mut TcpStream) {
+    // Drain any leftover data in the buffer
+    let mut buf = [0u8; 256];
+    let timeout = std::time::Duration::from_millis(50);
+    let start = std::time::Instant::now();
+    
+    while start.elapsed() < timeout {
+        match stream.read(&mut buf) {
+            Ok(0) => break,
+            Ok(_) => continue,  // Keep draining
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(_) => break,
+        }
+    }
+}
+
 fn query(stream: &mut TcpStream, cmd: &str) -> String {
     send(stream, cmd);
     
     // Small delay to let device process command
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_millis(50));
     
     let mut resp = Vec::new();
-    let mut buf = [0u8; 64];
+    let mut buf = [0u8; 256];
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_millis(500);
 
@@ -234,7 +250,7 @@ fn query(stream: &mut TcpStream, cmd: &str) -> String {
                     break;  // Timeout reached
                 }
                 // Wait a bit and retry
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                std::thread::sleep(std::time::Duration::from_millis(50));
                 continue;
             }
             Err(e) => panic!("TCP read error: {}", e),
@@ -340,8 +356,14 @@ fn main() {
     
     // Clear errors and get ID (now with logging)
     conn.send("*CLS");
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    
     let idn = conn.query("*IDN?");
     println!("{}", idn);
+    
+    // Extra delay and buffer drain after *IDN? to prevent response bleed
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    drain_buffer(&mut conn.stream);
 
     // Set up each channel
     for profile in &profiles {
@@ -404,19 +426,21 @@ fn simulate_channel(
         
         // Turn off output (use channel-specific command)
         c.send(&format!("OUTP CH{},OFF", profile.channel));
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(200));
         
         // Set current limit
         c.send(&format!("CURR {:.3}", profile.current_limit_discharge_a));
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(200));
         
         // Turn on output
         c.send(&format!("OUTP CH{},ON", profile.channel));
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(200));
         
-        // Debug: verify channel is responding
+        // Debug: verify channel is responding (with extra care after query)
         let idn = c.query("*IDN?");
         log_message!(state, "CH{}: Initialized - {}", profile.channel, idn.trim());
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drain_buffer(&mut c.stream);
     }
 
     let mut soc = 1.0;
