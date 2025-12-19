@@ -3,8 +3,20 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+
+
+#[derive(Clone, Default)]
+struct RuntimeState {
+    soc: f64,
+    voltage: f64,
+    current: f64,
+    power: f64,
+    ocv: f64,
+    running: bool,
+}
 
 #[derive(Parser)]
 struct Args {
@@ -227,6 +239,24 @@ fn main() {
 
     let mut csv = csv_log.map(|p| csv::Writer::from_path(p).unwrap());
 
+    let addr = format!("{}:{}", ip, port);
+
+    let state = Arc::new(Mutex::new(RuntimeState {
+        soc: 1.0,
+        running: true,
+        ..Default::default()
+    }));
+    let tui_state = state.clone();
+    let profile_name = profile.name.clone();
+    let addr_clone = addr.clone();
+
+    std::thread::spawn(move || {
+        run_tui(tui_state, profile_name, addr_clone);
+    });
+
+
+    let sim_state = state.clone();
+
     loop {
         let now = Instant::now();
         let dt = now.duration_since(last).as_secs_f64();
@@ -273,14 +303,119 @@ fn main() {
             w.flush().unwrap();
         }
 
-        println!(
-            "SoC={:>5.1}%  V={:.3} V  I={:.3} A  P={:.2} W",
-            soc * 100.0,
-            v_filt,
-            i,
-            v_filt * i
-        );
+        {
+            let mut s = sim_state.lock().unwrap();
+            s.soc = soc;
+            s.voltage = v_filt;
+            s.current = i;
+            s.power = v_filt * i;
+            s.ocv = voc;
+        }
+
+        if !sim_state.lock().unwrap().running {
+            send(&mut stream, "OUTP OFF");
+            break;
+        }
 
         sleep(Duration::from_millis(profile.update_interval_ms));
     }
 }
+
+use crossterm::{
+    event::{self, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
+    style::{Modifier, Style},
+    widgets::{Block, Borders, Gauge, Paragraph},
+    Terminal,
+};
+
+fn run_tui(state: Arc<Mutex<RuntimeState>>, profile_name: String, addr: String) {
+    enable_raw_mode().unwrap();
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen).unwrap();
+
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    loop {
+        terminal
+            .draw(|f| {
+                let s = state.lock().unwrap().clone();
+
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(3),
+                        Constraint::Length(5),
+                        Constraint::Length(5),
+                        Constraint::Length(3),
+                    ])
+                    .split(f.size());
+
+                // Header
+                f.render_widget(
+                    Paragraph::new(format!(
+                        "Device: {}   Profile: {}",
+                        addr, profile_name
+                    ))
+                    .block(Block::default().borders(Borders::ALL).title("DP832 Battery Simulator")),
+                    chunks[0],
+                );
+
+                // SoC gauge
+                f.render_widget(
+                    Gauge::default()
+                        .block(Block::default().borders(Borders::ALL).title("State of Charge"))
+                        .gauge_style(Style::default().add_modifier(Modifier::BOLD))
+                        .percent((s.soc * 100.0) as u16),
+                    chunks[1],
+                );
+
+                // Metrics
+                f.render_widget(
+                    Paragraph::new(format!(
+                        "Voltage : {:>6.3} V\n\
+                         Current : {:>6.3} A\n\
+                         Power   : {:>6.2} W\n\
+                         OCV     : {:>6.3} V",
+                        s.voltage, s.current, s.power, s.ocv
+                    ))
+                    .block(Block::default().borders(Borders::ALL).title("Measurements")),
+                    chunks[2],
+                );
+
+                // Footer
+                f.render_widget(
+                    Paragraph::new("q: quit   p: pause   r: reset SoC")
+                        .block(Block::default().borders(Borders::ALL)),
+                    chunks[3],
+                );
+            })
+            .unwrap();
+
+        // Input handling
+        if event::poll(Duration::from_millis(100)).unwrap() {
+            if let Event::Key(k) = event::read().unwrap() {
+                match k.code {
+                    KeyCode::Char('q') => {
+                        state.lock().unwrap().running = false;
+                        break;
+                    }
+                    KeyCode::Char('r') => {
+                        state.lock().unwrap().soc = 1.0;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    disable_raw_mode().unwrap();
+    execute!(terminal.backend_mut(), LeaveAlternateScreen).unwrap();
+}
+
