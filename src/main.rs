@@ -209,16 +209,16 @@ fn send(stream: &mut TcpStream, cmd: &str) {
 }
 
 fn drain_buffer(stream: &mut TcpStream) {
-    // Drain any leftover data in the buffer
+    // Drain any leftover data in the buffer to prevent response bleed
     let mut buf = [0u8; 256];
-    let timeout = std::time::Duration::from_millis(50);
+    let timeout = std::time::Duration::from_millis(100);
     let start = std::time::Instant::now();
     
     while start.elapsed() < timeout {
         match stream.read(&mut buf) {
-            Ok(0) => break,
+            Ok(0) => break,  // Connection closed
             Ok(_) => continue,  // Keep draining
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,  // No more data
             Err(_) => break,
         }
     }
@@ -227,13 +227,25 @@ fn drain_buffer(stream: &mut TcpStream) {
 fn query(stream: &mut TcpStream, cmd: &str) -> String {
     send(stream, cmd);
     
-    // Small delay to let device process command
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    // Delay to let device process command
+    // Longer delay for *IDN? as it returns more data
+    let delay = if cmd.starts_with("*IDN") {
+        std::time::Duration::from_millis(100)
+    } else {
+        std::time::Duration::from_millis(50)
+    };
+    std::thread::sleep(delay);
     
     let mut resp = Vec::new();
     let mut buf = [0u8; 256];
     let start = std::time::Instant::now();
-    let timeout = std::time::Duration::from_millis(500);
+    
+    // Longer timeout for *IDN? queries
+    let timeout = if cmd.starts_with("*IDN") {
+        std::time::Duration::from_millis(500)
+    } else {
+        std::time::Duration::from_millis(300)
+    };
 
     loop {
         match stream.read(&mut buf) {
@@ -356,12 +368,12 @@ fn main() {
     
     // Clear errors and get ID (now with logging)
     conn.send("*CLS");
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    std::thread::sleep(std::time::Duration::from_millis(50));
     
     let idn = conn.query("*IDN?");
     println!("{}", idn);
     
-    // Extra delay and buffer drain after *IDN? to prevent response bleed
+    // Drain buffer and add delay after *IDN? to prevent response bleed
     std::thread::sleep(std::time::Duration::from_millis(100));
     drain_buffer(&mut conn.stream);
 
@@ -436,9 +448,11 @@ fn simulate_channel(
         c.send(&format!("OUTP CH{},ON", profile.channel));
         std::thread::sleep(std::time::Duration::from_millis(200));
         
-        // Debug: verify channel is responding (with extra care after query)
+        // Debug: verify channel is responding
         let idn = c.query("*IDN?");
         log_message!(state, "CH{}: Initialized - {}", profile.channel, idn.trim());
+        
+        // Drain buffer and add delay after *IDN? to prevent response bleed
         std::thread::sleep(std::time::Duration::from_millis(100));
         drain_buffer(&mut c.stream);
     }
