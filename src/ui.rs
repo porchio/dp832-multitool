@@ -272,7 +272,15 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                         ])
                         .split(vertical_split[1]);
 
-                    // Event log window
+                    // Event log window - calculate scroll to show most recent
+                    let log_height = log_split[0].height.saturating_sub(2) as usize; // Subtract borders
+                    let log_lines = s.log_messages.len();
+                    let log_scroll = if log_lines > log_height {
+                        (log_lines - log_height) as u16
+                    } else {
+                        0
+                    };
+                    
                     let log_text: String = s.log_messages
                         .iter()
                         .map(|msg| format!("{}\n", msg))
@@ -281,11 +289,20 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                     f.render_widget(
                         Paragraph::new(log_text)
                             .block(Block::default().borders(Borders::ALL).title("Event Log"))
-                            .style(Style::default().fg(Color::Gray)),
+                            .style(Style::default().fg(Color::Gray))
+                            .scroll((log_scroll, 0)),
                         log_split[0],
                     );
 
-                    // SCPI log window
+                    // SCPI log window - calculate scroll to show most recent
+                    let scpi_height = log_split[1].height.saturating_sub(2) as usize; // Subtract borders
+                    let scpi_lines = s.scpi_log_messages.len();
+                    let scpi_scroll = if scpi_lines > scpi_height {
+                        (scpi_lines - scpi_height) as u16
+                    } else {
+                        0
+                    };
+                    
                     let scpi_log_text: String = s.scpi_log_messages
                         .iter()
                         .map(|msg| format!("{}\n", msg))
@@ -294,7 +311,8 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                     f.render_widget(
                         Paragraph::new(scpi_log_text)
                             .block(Block::default().borders(Borders::ALL).title("SCPI Commands"))
-                            .style(Style::default().fg(Color::DarkGray)),
+                            .style(Style::default().fg(Color::DarkGray))
+                            .scroll((scpi_scroll, 0)),
                         log_split[1],
                     );
                 }
