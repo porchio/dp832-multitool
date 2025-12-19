@@ -164,9 +164,8 @@ impl ScpiConnection {
     fn select_channel(&mut self, channel: u8) {
         if self.selected_channel != Some(channel) {
             let cmd = format!("INST:NSEL {}", channel);
-            if self.verbose_scpi {
-                log_scpi!(self.state, "→ {}", cmd);
-            }
+            // Always log channel selection
+            log_scpi!(self.state, "→ {}", cmd);
             send(&mut self.stream, &cmd);
             self.selected_channel = Some(channel);
         }
@@ -175,6 +174,7 @@ impl ScpiConnection {
     fn send(&mut self, cmd: &str) {
         // Log important commands always, others only if verbose
         let is_important = cmd.starts_with("OUTP") || 
+                          cmd.starts_with("VOLT ") ||
                           cmd.starts_with("CURR ") ||
                           cmd.starts_with("*");
         
@@ -187,6 +187,7 @@ impl ScpiConnection {
     fn query(&mut self, cmd: &str) -> String {
         // Log important queries always, others only if verbose
         let is_important = cmd == "*IDN?" || 
+                          cmd.starts_with("MEAS:") ||
                           cmd.starts_with("SYST") ||
                           cmd.starts_with("OUTP?");
         
@@ -325,9 +326,6 @@ fn main() {
     // Set to non-blocking mode with manual timeout handling
     stream.set_nonblocking(true).unwrap();
 
-    send(&mut stream, "*CLS");
-    println!("{}", query(&mut stream, "*IDN?"));
-
     // Initialize shared state
     let state = Arc::new(Mutex::new(ui::RuntimeState {
         channels: Default::default(),
@@ -335,6 +333,15 @@ fn main() {
         log_messages: Default::default(),
         scpi_log_messages: Default::default(),
     }));
+
+    // Create SCPI connection early (with logging support)
+    let scpi_conn = ScpiConnection::new(stream, state.clone());
+    let mut conn = scpi_conn;
+    
+    // Clear errors and get ID (now with logging)
+    conn.send("*CLS");
+    let idn = conn.query("*IDN?");
+    println!("{}", idn);
 
     // Set up each channel
     for profile in &profiles {
@@ -354,9 +361,8 @@ fn main() {
         ui::run_tui(tui_state, addr_clone);
     });
 
-    // Create shared SCPI connection with channel tracking (mutex-protected)
-    let scpi_conn = ScpiConnection::new(stream, state.clone());
-    let shared_conn = Arc::new(Mutex::new(scpi_conn));
+    // Share SCPI connection with channel tracking (mutex-protected)
+    let shared_conn = Arc::new(Mutex::new(conn));
     
     // Start simulation threads for each channel
     let mut sim_threads = Vec::new();
