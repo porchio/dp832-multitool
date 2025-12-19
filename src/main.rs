@@ -382,7 +382,7 @@ fn simulate_channel(
         let mut c = conn.lock().unwrap();
         c.select_channel(profile.channel);
         c.send("OUTP OFF");
-        c.send(&format!("CURR {}", profile.current_limit_discharge_a));
+        c.send(&format!("CURR {:.3}", profile.current_limit_discharge_a));
         c.send("OUTP ON");
         
         // Debug: verify channel is responding
