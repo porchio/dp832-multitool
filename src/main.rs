@@ -334,8 +334,9 @@ fn simulate_channel(
     mut csv: Option<csv::Writer<File>>,
 ) {
     let ch_idx = (profile.channel - 1) as usize;
+    let ch_name = format!("CH{}", profile.channel);
     
-    // Initialize channel - select it once and then use simple commands
+    // Initialize channel - only switch channel when needed (for settings)
     log_scpi!(state, writers, "CH{} → INST:NSEL {}", profile.channel, profile.channel);
     send(&mut stream, &format!("INST:NSEL {}", profile.channel));
     
@@ -357,19 +358,21 @@ fn simulate_channel(
     let mut soc = 1.0;
     let mut last = Instant::now();
     let mut v_filt = interpolate_ocv(&profile.ocv_curve, soc);
+    let mut last_voltage_set = v_filt;  // Track last voltage we sent to PSU
     let mut consecutive_errors = 0;
     const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+    const VOLTAGE_CHANGE_THRESHOLD: f64 = 0.001;  // Only update if voltage changes by >1mV
 
     loop {
         let now = Instant::now();
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        // Query current using simple command (channel already selected at init)
-        let curr_cmd = "MEAS:CURR?";
-        log_scpi!(state, writers, "CH{} → {}", profile.channel, curr_cmd);
-        let curr_str = query(&mut stream, curr_cmd);
-        log_scpi!(state, writers, "CH{} ← {}", profile.channel, curr_str.trim());
+        // Query current using channel-specific command (no channel switching needed)
+        let curr_cmd = format!(":MEAS:CURR? {}", ch_name);
+        log_scpi!(state, writers, "{} → {}", ch_name, curr_cmd);
+        let curr_str = query(&mut stream, &curr_cmd);
+        log_scpi!(state, writers, "{} ← {}", ch_name, curr_str.trim());
         
         // Check for error responses before parsing
         let curr_result: Result<f64, String> = {
@@ -435,10 +438,17 @@ fn simulate_channel(
             v_filt = profile.max_voltage;
         }
 
-        // Set voltage - channel already selected, just send VOLT command
-        let volt_cmd = format!("VOLT {:.3}", v_filt);
-        log_scpi!(state, writers, "CH{} → {}", profile.channel, volt_cmd);
-        send(&mut stream, &volt_cmd);
+        // Set voltage - only if it has changed significantly (reduces SCPI traffic and Command errors)
+        if (v_filt - last_voltage_set).abs() > VOLTAGE_CHANGE_THRESHOLD {
+            log_scpi!(state, writers, "{} → INST:NSEL {}", ch_name, profile.channel);
+            send(&mut stream, &format!("INST:NSEL {}", profile.channel));
+            
+            let volt_cmd = format!("VOLT {:.3}", v_filt);
+            log_scpi!(state, writers, "{} → {}", ch_name, volt_cmd);
+            send(&mut stream, &volt_cmd);
+            
+            last_voltage_set = v_filt;
+        }
 
         if let Some(w) = csv.as_mut() {
             w.write_record(&[
