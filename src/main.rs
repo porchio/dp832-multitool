@@ -204,24 +204,39 @@ impl ScpiConnection {
 fn send(stream: &mut TcpStream, cmd: &str) {
     let cmd = format!("{}\n", cmd);
     stream.write_all(cmd.as_bytes()).unwrap();
+    stream.flush().unwrap();  // Ensure data is sent immediately
 }
 
 fn query(stream: &mut TcpStream, cmd: &str) -> String {
     send(stream, cmd);
+    
+    // Small delay to let device process command
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    
     let mut resp = Vec::new();
     let mut buf = [0u8; 64];
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(500);
 
     loop {
         match stream.read(&mut buf) {
-            Ok(0) => break,
+            Ok(0) => break,  // Connection closed
             Ok(n) => {
                 resp.extend_from_slice(&buf[..n]);
                 if resp.ends_with(b"\n") {
-                    break;
+                    break;  // Got complete response
                 }
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-            Err(e) => panic!("{}", e),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // No data available yet, check timeout
+                if start.elapsed() >= timeout {
+                    break;  // Timeout reached
+                }
+                // Wait a bit and retry
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            }
+            Err(e) => panic!("TCP read error: {}", e),
         }
     }
 
@@ -307,9 +322,8 @@ fn main() {
     let addr = format!("{}:{}", ip, port);
     let mut stream = TcpStream::connect(&addr).unwrap();
 
-    stream
-        .set_read_timeout(Some(Duration::from_secs(1)))
-        .unwrap();
+    // Set to non-blocking mode with manual timeout handling
+    stream.set_nonblocking(true).unwrap();
 
     send(&mut stream, "*CLS");
     println!("{}", query(&mut stream, "*IDN?"));
