@@ -448,13 +448,11 @@ fn simulate_channel(
         c.send(&format!("OUTP CH{},ON", profile.channel));
         std::thread::sleep(std::time::Duration::from_millis(200));
         
-        // Debug: verify channel is responding
-        let idn = c.query("*IDN?");
-        log_message!(state, "CH{}: Initialized - {}", profile.channel, idn.trim());
-        
-        // Drain buffer and add delay after *IDN? to prevent response bleed
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        drain_buffer(&mut c.stream);
+        log_message!(state, "CH{}: Initialized - {} ({:.1}Ah, {:.3}Ω)", 
+                    profile.channel, 
+                    profile.name,
+                    profile.capacity_ah,
+                    profile.internal_resistance_ohm);
     }
 
     let mut soc = 1.0;
