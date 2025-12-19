@@ -28,11 +28,14 @@ A real-time battery simulator for the Rigol DP832 power supply unit. Simulates r
 - **Persistent logs**: All events and SCPI commands saved to timestamped files
 
 ### Robust Communication
-- **Optimized channel switching**: Only switches when necessary
-- **Adaptive timeouts**: Longer timeouts for complex queries like `*IDN?`
-- **Buffer management**: Automatic draining to prevent response bleed
-- **Error handling**: Graceful handling of communication errors
-- **Safety features**: Stops simulation if current reading fails
+- **Separate TCP connections**: One dedicated connection per channel to avoid interference
+- **Proper initialization**: Each connection cleared with `*CLS` before use
+- **Simple SCPI commands**: Standard commands without channel suffix (as per DP832 manual)
+- **Channel selection persistence**: Select once at init, then use simple commands
+- **Error detection & recovery**: Automatically detects and clears PSU error responses
+- **Retry logic**: Gracefully handles transient communication errors
+- **Error handling**: Stops simulation after 5 consecutive errors for safety
+- **Detailed logging**: All SCPI commands and responses logged for debugging
 
 ### Battery Chemistry Profiles
 Pre-configured profiles for common battery types:
