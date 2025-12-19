@@ -21,10 +21,11 @@ A real-time battery simulator for the Rigol DP832 power supply unit. Simulates r
 - **Real-time graphs**: Voltage, current, and power history for each channel
 - **Live metrics**: SoC gauge, voltage, current, power, and OCV
 - **Dual log windows**: 
-  - Event log for runtime messages
-  - SCPI command log for debugging
+  - Event log for runtime messages (also saved to `logs/event_*.log`)
+  - SCPI command log for debugging (also saved to `logs/scpi_*.log`)
 - **Auto-scrolling**: Latest information always visible
 - **Keyboard controls**: Interactive management
+- **Persistent logs**: All events and SCPI commands saved to timestamped files
 
 ### Robust Communication
 - **Optimized channel switching**: Only switches when necessary
@@ -147,6 +148,22 @@ While the simulator is running:
 
 ## Logging
 
+### Persistent Log Files
+All runtime events and SCPI commands are automatically saved to timestamped log files in the `logs/` directory:
+
+- **Event Log**: `logs/event_YYYYMMDD_HHMMSS.log`
+  - Runtime messages and errors
+  - Channel initialization
+  - Current measurements
+  - Cutoff voltage events
+  
+- **SCPI Command Log**: `logs/scpi_YYYYMMDD_HHMMSS.log`
+  - All commands sent to the power supply (marked with →)
+  - All responses received (marked with ←)
+  - Useful for debugging communication issues
+
+Each log entry includes a precise timestamp (YYYY-MM-DD HH:MM:SS.mmm). Log files persist after the application exits for analysis and troubleshooting.
+
 ### CSV Logging
 Enable CSV logging with `--log` or in the configuration file:
 ```bash
@@ -166,7 +183,7 @@ CSV columns:
 - Power (W)
 
 ### SCPI Command Logging
-All SCPI commands are logged in the bottom-right log window. Set `VERBOSE_SCPI` environment variable for detailed logging:
+All SCPI commands are logged in the bottom-right log window and to `logs/scpi_*.log` files. Set `VERBOSE_SCPI` environment variable for detailed logging:
 ```bash
 VERBOSE_SCPI=1 dp832_battery_sim -p profiles/lifepo4.json
 ```
