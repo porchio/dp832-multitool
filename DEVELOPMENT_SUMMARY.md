@@ -148,7 +148,9 @@ dp832-battery-sim/
 │   ├── development.toml
 │   ├── bench.toml
 │   └── README.md
-├── logs/                # CSV output directory
+├── logs/                # CSV output and runtime logs directory
+│   ├── event_*.log      # Runtime event logs (timestamped)
+│   └── scpi_*.log       # SCPI command logs (timestamped)
 ├── README.md            # Comprehensive documentation
 ├── Cargo.toml           # Rust dependencies
 └── .gitignore           # Git ignore rules
@@ -180,6 +182,7 @@ dp832-battery-sim/
 - ✓ Error handling with safety features
 - ✓ All SCPI commands logged
 - ✓ Verbose mode for debugging
+- ✓ Persistent log files with timestamps
 
 ### Configuration
 - ✓ TOML configuration files
@@ -187,16 +190,18 @@ dp832-battery-sim/
 - ✓ Multi-channel support (up to 3)
 - ✓ CSV logging per channel
 - ✓ Command-line arguments
+- ✓ Event and SCPI log files in logs/ directory
 
 ## 📊 Statistics
 
-- **Total Commits**: 29 (including this session: 5 commits)
-- **Files Modified**: 5 (`main.rs`, `ui.rs`, `README.md`, `.gitignore`, `DEVELOPMENT_SUMMARY.md`)
+- **Total Commits**: 30 (including this session: 6 commits)
+- **Files Modified**: 6 (`main.rs`, `ui.rs`, `Cargo.toml`, `README.md`, `.gitignore`, `DEVELOPMENT_SUMMARY.md`)
 - **New Files Created**: 14 (profiles + examples + README files)
+- **Dependencies**: 9 Rust crates (including chrono for log timestamps)
 - **Lines of Code**: 
-  - `main.rs`: ~550 lines
-  - `ui.rs`: ~550 lines
-  - Total: ~1100 lines of Rust code
+  - `main.rs`: ~580 lines
+  - `ui.rs`: ~590 lines
+  - Total: ~1170 lines of Rust code
 
 ## 🚀 Usage Examples
 
@@ -237,50 +242,80 @@ VERBOSE_SCPI=1 dp832_battery_sim -p profiles/lifepo4.json
 - **s** - Clear SCPI command log window
 
 ### 14. **Fixed: Application Exiting Prematurely** ✓
-+- **Commit**: `7509a32` - "Fix: Prevent application from exiting on SCPI errors"
-+  
-+- **Root Cause Fixed**:
-+  - TUI was spawned as a separate thread, main thread waited for simulation threads
-+  - When simulation threads encountered errors and exited, main thread would exit
-+  - Application would close after 1-2 seconds if errors occurred
-+  
-+- **Solution Implemented**:
-+  - TUI now runs in main thread (blocking), keeping application alive
-+  - Simulation threads spawned in background
-+  - Application stays open until user quits with 'q'
-+  
-+- **Retry Logic**:
-+  - Added consecutive error counter (max 5 retries)
-+  - On parse failure, skip iteration and retry next cycle
-+  - Only stop simulation after MAX_CONSECUTIVE_ERRORS
-+  - Prevents premature shutdown on transient SCPI errors
-+
-+## 📝 Recent Commits (This Session)
-+
-+1. **7509a32** (NEW) - "Fix: Prevent application from exiting on SCPI errors"
-+   - Run TUI in main thread instead of spawning it
-+   - Add retry logic with consecutive error counter (max 5 retries)
-+   - Skip iteration and retry on parse failures
-+   - Only stop simulation after persistent failures
-+
-+2. **fc8627a** - "Fix: Remove problematic *IDN? query during channel initialization"
-+   - Eliminated root cause of "Command error" responses
-+   - Removed unnecessary *IDN? query after channel enable
-+   - Now shows informative battery profile details instead
-+
-+3. **bedfc74** - "fix: improve *IDN? query handling with adaptive timeouts"
-+   - Adaptive timeouts based on command type
-+   - Proper buffer draining after *IDN? queries
-+   - Prevents "Command error" responses
-+
-+4. **e97bf6e** - "docs: add comprehensive README for the project"
-+   - Complete documentation with examples
-+   - Architecture overview
-+   - Troubleshooting guide
-+
-+5. **3de5b27** - "chore: update .gitignore to exclude logs and editor files"
-+   - Ignore CSV log files
-+   - Ignore editor backup files
+- **Commit**: `7509a32` - "Fix: Prevent application from exiting on SCPI errors"
+  
+- **Root Cause Fixed**:
+  - TUI was spawned as a separate thread, main thread waited for simulation threads
+  - When simulation threads encountered errors and exited, main thread would exit
+  - Application would close after 1-2 seconds if errors occurred
+  
+- **Solution Implemented**:
+  - TUI now runs in main thread (blocking), keeping application alive
+  - Simulation threads spawned in background
+  - Application stays open until user quits with 'q'
+  
+- **Retry Logic**:
+  - Added consecutive error counter (max 5 retries)
+  - On parse failure, skip iteration and retry next cycle
+  - Only stop simulation after MAX_CONSECUTIVE_ERRORS
+  - Prevents premature shutdown on transient SCPI errors
+
+### 15. **Persistent Log File Storage** ✓
+- **Commit**: `8971149` - "feat: add persistent log file storage for event and SCPI logs"
+
+- **Features Implemented**:
+  - Timestamped log files created in `logs/` directory
+  - Two separate log files per session:
+    - `logs/event_YYYYMMDD_HHMMSS.log` - All runtime events and messages
+    - `logs/scpi_YYYYMMDD_HHMMSS.log` - All SCPI commands and responses
+  - Each log entry includes precise timestamp (YYYY-MM-DD HH:MM:SS.mmm)
+  - Logs are flushed immediately to disk for reliability
+  - Persist after application exits for debugging and analysis
+  - Added `chrono` dependency for timestamp formatting
+
+- **Technical Implementation**:
+  - Created `LogWriters` struct to manage file handles
+  - Modified `log_message!` and `log_scpi!` macros to write to both UI and files
+  - Thread-safe log writing with Arc<Mutex<LogWriters>>
+  - UI log windows continue to work as before (in-memory buffers)
+
+## 📝 Recent Commits (This Session)
+
+1. **8971149** (NEW) - "feat: add persistent log file storage for event and SCPI logs"
+   - Add chrono dependency for precise timestamps
+   - Create LogWriters struct to manage log file handles
+   - Write all events and SCPI commands to timestamped files
+   - Immediate flush for reliability
+   - Logs persist after application exits
+
+2. **7509a32** - "Fix: Prevent application from exiting on SCPI errors"
+2. **7509a32** - "Fix: Prevent application from exiting on SCPI errors"
+   - Run TUI in main thread instead of spawning it
+   - Add retry logic with consecutive error counter (max 5 retries)
+   - Skip iteration and retry on parse failures
+   - Only stop simulation after persistent failures
+
+3. **fc8627a** - "Fix: Remove problematic *IDN? query during channel initialization"
+3. **fc8627a** - "Fix: Remove problematic *IDN? query during channel initialization"
+   - Eliminated root cause of "Command error" responses
+   - Removed unnecessary *IDN? query after channel enable
+   - Now shows informative battery profile details instead
+
+4. **bedfc74** - "fix: improve *IDN? query handling with adaptive timeouts"
+4. **bedfc74** - "fix: improve *IDN? query handling with adaptive timeouts"
+   - Adaptive timeouts based on command type
+   - Proper buffer draining after *IDN? queries
+   - Prevents "Command error" responses
+
+5. **e97bf6e** - "docs: add comprehensive README for the project"
+5. **e97bf6e** - "docs: add comprehensive README for the project"
+   - Complete documentation with examples
+   - Architecture overview
+   - Troubleshooting guide
+
+6. **3de5b27** - "chore: update .gitignore to exclude logs and editor files"
+   - Ignore CSV log files
+   - Ignore editor backup files
 
 ## ✨ Build Status
 
