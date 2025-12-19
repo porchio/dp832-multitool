@@ -1,0 +1,31 @@
+{
+  "name": "NiMH AA",
+  "channel": 1,
+
+  "capacity_ah": 2.0,
+  "internal_resistance_ohm": 0.050,
+
+  "current_limit_discharge_a": 2.0,
+  "current_limit_charge_a": 0.5,
+
+  "cutoff_voltage": 0.9,
+  "max_voltage": 1.45,
+
+  "rc_time_constant_ms": 400,
+
+  "update_interval_ms": 100,
+
+  "ocv_curve": [
+    { "soc": 1.00, "voltage": 1.35 },
+    { "soc": 0.90, "voltage": 1.30 },
+    { "soc": 0.80, "voltage": 1.27 },
+    { "soc": 0.70, "voltage": 1.25 },
+    { "soc": 0.60, "voltage": 1.23 },
+    { "soc": 0.50, "voltage": 1.22 },
+    { "soc": 0.40, "voltage": 1.20 },
+    { "soc": 0.30, "voltage": 1.18 },
+    { "soc": 0.20, "voltage": 1.15 },
+    { "soc": 0.10, "voltage": 1.10 },
+    { "soc": 0.00, "voltage": 1.00 }
+  ]
+}

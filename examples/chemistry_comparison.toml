@@ -1,0 +1,17 @@
+# Chemistry Comparison Configuration
+# Compare LiFePO4 vs Li-ion performance side-by-side
+#
+# Usage:
+#   dp832_battery_sim --config examples/chemistry_comparison.toml \
+#     -p profiles/lifepo4.json \
+#     -p profiles/liion_18650.json
+
+[device]
+ip = "192.168.1.100"
+port = 5555
+
+[battery]
+profile = "profiles/lifepo4.json"
+
+[logging]
+csv = "logs/chemistry_comparison.csv"

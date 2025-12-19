@@ -1,0 +1,32 @@
+{
+  "name": "LiFePO4 3S",
+  "channel": 3,
+
+  "capacity_ah": 10.0,
+  "internal_resistance_ohm": 0.030,
+
+  "current_limit_discharge_a": 10.0,
+  "current_limit_charge_a": 5.0,
+
+  "cutoff_voltage": 8.0,
+  "max_voltage": 11.1,
+
+  "rc_time_constant_ms": 350,
+
+  "update_interval_ms": 100,
+
+  "ocv_curve": [
+    { "soc": 1.00, "voltage": 10.50 },
+    { "soc": 0.95, "voltage": 10.35 },
+    { "soc": 0.90, "voltage": 10.20 },
+    { "soc": 0.80, "voltage": 10.05 },
+    { "soc": 0.70, "voltage": 9.99 },
+    { "soc": 0.60, "voltage": 9.96 },
+    { "soc": 0.50, "voltage": 9.93 },
+    { "soc": 0.40, "voltage": 9.90 },
+    { "soc": 0.30, "voltage": 9.84 },
+    { "soc": 0.20, "voltage": 9.75 },
+    { "soc": 0.10, "voltage": 9.60 },
+    { "soc": 0.00, "voltage": 9.00 }
+  ]
+}

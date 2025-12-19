@@ -1,0 +1,33 @@
+{
+  "name": "LiPo 1S",
+  "channel": 3,
+
+  "capacity_ah": 1.2,
+  "internal_resistance_ohm": 0.020,
+
+  "current_limit_discharge_a": 5.0,
+  "current_limit_charge_a": 1.2,
+
+  "cutoff_voltage": 3.0,
+  "max_voltage": 4.2,
+
+  "rc_time_constant_ms": 200,
+
+  "update_interval_ms": 100,
+
+  "ocv_curve": [
+    { "soc": 1.00, "voltage": 4.20 },
+    { "soc": 0.95, "voltage": 4.10 },
+    { "soc": 0.90, "voltage": 4.00 },
+    { "soc": 0.80, "voltage": 3.90 },
+    { "soc": 0.70, "voltage": 3.82 },
+    { "soc": 0.60, "voltage": 3.77 },
+    { "soc": 0.50, "voltage": 3.73 },
+    { "soc": 0.40, "voltage": 3.68 },
+    { "soc": 0.30, "voltage": 3.62 },
+    { "soc": 0.20, "voltage": 3.55 },
+    { "soc": 0.10, "voltage": 3.45 },
+    { "soc": 0.05, "voltage": 3.30 },
+    { "soc": 0.00, "voltage": 3.00 }
+  ]
+}

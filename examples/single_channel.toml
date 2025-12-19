@@ -1,0 +1,12 @@
+# Single Channel Configuration Example
+# Use this for testing a single battery on channel 1
+
+[device]
+ip = "192.168.1.100"
+port = 5555
+
+[battery]
+profile = "profiles/lifepo4.json"
+
+[logging]
+csv = "logs/single_channel_test.csv"

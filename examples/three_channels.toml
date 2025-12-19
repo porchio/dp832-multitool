@@ -1,0 +1,20 @@
+# Three Channel Configuration Example
+# Demonstrates all 3 channels with different battery chemistries
+# 
+# Usage:
+#   dp832_battery_sim --config examples/three_channels.toml \
+#     -p profiles/lifepo4.json \
+#     -p profiles/liion_18650.json \
+#     -p profiles/lipo_1s.json
+
+[device]
+ip = "192.168.1.100"
+port = 5555
+
+# Note: With multiple profiles on command line, the [battery] section profile is ignored
+# But you can still specify a default profile here for single-channel mode
+[battery]
+profile = "profiles/lifepo4.json"
+
+[logging]
+csv = "logs/multi_channel_test.csv"

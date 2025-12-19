@@ -1,0 +1,33 @@
+{
+  "name": "Li-ion 18650",
+  "channel": 2,
+
+  "capacity_ah": 2.5,
+  "internal_resistance_ohm": 0.025,
+
+  "current_limit_discharge_a": 2.5,
+  "current_limit_charge_a": 1.0,
+
+  "cutoff_voltage": 2.8,
+  "max_voltage": 4.2,
+
+  "rc_time_constant_ms": 250,
+
+  "update_interval_ms": 100,
+
+  "ocv_curve": [
+    { "soc": 1.00, "voltage": 4.15 },
+    { "soc": 0.95, "voltage": 4.05 },
+    { "soc": 0.90, "voltage": 3.95 },
+    { "soc": 0.80, "voltage": 3.85 },
+    { "soc": 0.70, "voltage": 3.80 },
+    { "soc": 0.60, "voltage": 3.75 },
+    { "soc": 0.50, "voltage": 3.70 },
+    { "soc": 0.40, "voltage": 3.65 },
+    { "soc": 0.30, "voltage": 3.60 },
+    { "soc": 0.20, "voltage": 3.50 },
+    { "soc": 0.10, "voltage": 3.35 },
+    { "soc": 0.05, "voltage": 3.20 },
+    { "soc": 0.00, "voltage": 3.00 }
+  ]
+}

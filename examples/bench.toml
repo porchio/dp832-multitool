@@ -1,0 +1,9 @@
+[device]
+ip = "192.168.1.140"
+port = 5555
+
+[battery]
+profile = "lifepo4.json"
+
+[logging]
+csv = "discharge.csv"
