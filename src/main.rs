@@ -147,69 +147,6 @@ fn load_optional_config(path: Option<&str>) -> Config {
 
 /* ---------------- SCPI helpers ---------------- */
 
-struct ScpiConnection {
-    stream: TcpStream,
-    selected_channel: Option<u8>,
-    state: Arc<Mutex<ui::RuntimeState>>,
-    writers: Arc<Mutex<ui::LogWriters>>,
-    verbose_scpi: bool,
-}
-
-impl ScpiConnection {
-    fn new(stream: TcpStream, state: Arc<Mutex<ui::RuntimeState>>, writers: Arc<Mutex<ui::LogWriters>>) -> Self {
-        // Check if verbose SCPI logging is enabled
-        let verbose_scpi = std::env::var("VERBOSE_SCPI").is_ok();
-        
-        Self {
-            stream,
-            selected_channel: None,
-            state,
-            writers,
-            verbose_scpi,
-        }
-    }
-
-    fn select_channel(&mut self, channel: u8) {
-        if self.selected_channel != Some(channel) {
-            let cmd = format!("INST:NSEL {}", channel);
-            // Always log channel selection
-            log_scpi!(self.state, self.writers, "→ {}", cmd);
-            send(&mut self.stream, &cmd);
-            self.selected_channel = Some(channel);
-        }
-    }
-
-    fn send(&mut self, cmd: &str) {
-        // Log important commands always, others only if verbose
-        let is_important = cmd.starts_with("OUTP") || 
-                          cmd.starts_with("VOLT ") ||
-                          cmd.starts_with("CURR ") ||
-                          cmd.starts_with("*");
-        
-        if is_important || self.verbose_scpi {
-            log_scpi!(self.state, self.writers, "→ {}", cmd);
-        }
-        send(&mut self.stream, cmd);
-    }
-
-    fn query(&mut self, cmd: &str) -> String {
-        // Log important queries always, others only if verbose
-        let is_important = cmd == "*IDN?" || 
-                          cmd.starts_with("MEAS:") ||
-                          cmd.starts_with("SYST") ||
-                          cmd.starts_with("OUTP?");
-        
-        if is_important || self.verbose_scpi {
-            log_scpi!(self.state, self.writers, "→ {}", cmd);
-        }
-        let response = query(&mut self.stream, cmd);
-        if is_important || self.verbose_scpi {
-            log_scpi!(self.state, self.writers, "← {}", response.trim());
-        }
-        response
-    }
-}
-
 fn send(stream: &mut TcpStream, cmd: &str) {
     let cmd = format!("{}\n", cmd);
     stream.write_all(cmd.as_bytes()).unwrap();
@@ -314,12 +251,16 @@ fn main() {
     println!("Active channels: {}", profiles.len());
 
     let addr = format!("{}:{}", ip, port);
-    let stream = TcpStream::connect(&addr).unwrap();
+    let mut stream = TcpStream::connect(&addr).unwrap();
 
     // Set blocking mode with 1 second read timeout (as in working version)
     stream
         .set_read_timeout(Some(Duration::from_secs(1)))
         .unwrap();
+
+    // Clear errors and get ID
+    send(&mut stream, "*CLS");
+    println!("{}", query(&mut stream, "*IDN?"));
 
     // Initialize shared state
     let state = Arc::new(Mutex::new(ui::RuntimeState {
@@ -332,15 +273,6 @@ fn main() {
     // Initialize log writers
     let writers = Arc::new(Mutex::new(ui::LogWriters::new()));
 
-    // Create SCPI connection early (with logging support)
-    let scpi_conn = ScpiConnection::new(stream, state.clone(), writers.clone());
-    let mut conn = scpi_conn;
-    
-    // Clear errors and get ID (now with logging)
-    conn.send("*CLS");
-    let idn = conn.query("*IDN?");
-    println!("{}", idn);
-
     // Set up each channel
     for profile in &profiles {
         let ch_idx = (profile.channel - 1) as usize;
@@ -352,58 +284,72 @@ fn main() {
         }
     }
 
-    // Share SCPI connection with channel tracking (mutex-protected)
-    let shared_conn = Arc::new(Mutex::new(conn));
-    
+    // Start TUI in separate thread
+    let tui_state = state.clone();
+    let addr_clone = addr.clone();
+    std::thread::spawn(move || {
+        ui::run_tui(tui_state, addr_clone);
+    });
+
     // Start simulation threads for each channel
+    // Each channel gets its own TCP connection to avoid race conditions
+    let mut sim_threads = Vec::new();
+    
     for profile in profiles {
         let state_clone = state.clone();
         let writers_clone = writers.clone();
-        let conn_clone = shared_conn.clone();
+        
+        // Create separate TCP stream for this channel (key to avoiding Command errors!)
+        let stream_clone = TcpStream::connect(&addr).unwrap();
+        stream_clone
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
         
         let csv_clone = csv_log.as_ref().map(|p| {
             let path = format!("{}_ch{}.csv", p.trim_end_matches(".csv"), profile.channel);
             csv::Writer::from_path(path).unwrap()
         });
 
-        std::thread::spawn(move || {
-            simulate_channel(state_clone, writers_clone, conn_clone, profile, csv_clone);
+        let thread = std::thread::spawn(move || {
+            simulate_channel(state_clone, writers_clone, stream_clone, profile, csv_clone);
         });
+        
+        sim_threads.push(thread);
     }
 
-    // Start TUI (blocking - runs until user quits)
-    ui::run_tui(state.clone(), addr.clone());
+    // Wait for all simulation threads to complete
+    for thread in sim_threads {
+        thread.join().unwrap();
+    }
 }
 
 fn simulate_channel(
     state: Arc<Mutex<ui::RuntimeState>>,
     writers: Arc<Mutex<ui::LogWriters>>,
-    conn: Arc<Mutex<ScpiConnection>>,
+    mut stream: TcpStream,
     profile: BatteryProfile,
     mut csv: Option<csv::Writer<File>>,
 ) {
     let ch_idx = (profile.channel - 1) as usize;
     
-    // Initialize channel
-    {
-        let mut c = conn.lock().unwrap();
-        c.select_channel(profile.channel);
-        
-        // Turn off output (use channel-specific command)
-        c.send(&format!("OUTP CH{},OFF", profile.channel));
-        
-        // Set current limit
-        c.send(&format!("CURR {:.3}", profile.current_limit_discharge_a));
-        
-        // Turn on output
-        c.send(&format!("OUTP CH{},ON", profile.channel));
-        
-        log_message!(state, writers, "CH{}: Initialized - {} ({:.1}Ah, {:.3}Ω)", 
-                    profile.channel, 
-                    profile.name,
-                    profile.capacity_ah,
-                    profile.internal_resistance_ohm);
+    // Initialize channel - use channel-specific commands to avoid race conditions
+    let init_cmds = [
+        format!("OUTP CH{},OFF", profile.channel),
+        format!("INST:NSEL {}", profile.channel),
+        format!("CURR {:.3}", profile.current_limit_discharge_a),
+        format!("OUTP CH{},ON", profile.channel),
+    ];
+    
+    for cmd in &init_cmds {
+        log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
+        send(&mut stream, cmd);
     }
+    
+    log_message!(state, writers, "CH{}: Initialized - {} ({:.1}Ah, {:.3}Ω)", 
+                profile.channel, 
+                profile.name,
+                profile.capacity_ah,
+                profile.internal_resistance_ohm);
 
     let mut soc = 1.0;
     let mut last = Instant::now();
@@ -416,20 +362,18 @@ fn simulate_channel(
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        // Query current directly without switching channel
-        let curr_result: Result<f64, String> = {
-            let mut c = conn.lock().unwrap();
-            let curr_str = c.query(&format!("MEAS:CURR? CH{}", profile.channel));
-            curr_str.trim().parse().map_err(|_| curr_str.clone())
-        };
+        // Query current directly using channel-specific command (no channel switching needed)
+        let curr_cmd = format!("MEAS:CURR? CH{}", profile.channel);
+        log_scpi!(state, writers, "CH{} → {}", profile.channel, curr_cmd);
+        let curr_str = query(&mut stream, &curr_cmd);
+        log_scpi!(state, writers, "CH{} ← {}", profile.channel, curr_str.trim());
+        
+        let curr_result: Result<f64, String> = curr_str.trim().parse().map_err(|_| curr_str.clone());
 
         // Handle parsing failure with retry logic
         let i = match curr_result {
             Ok(current) => {
                 consecutive_errors = 0;  // Reset error counter on success
-                if current.abs() > 0.001 {
-                    log_message!(state, writers, "CH{}: Current = {:.3} A", profile.channel, current);
-                }
                 current
             }
             Err(raw_response) => {
@@ -441,9 +385,9 @@ fn simulate_channel(
                     log_message!(state, writers, "CH{}: Too many consecutive errors. Stopping simulation for safety.", 
                                 profile.channel);
                     // Turn off output for safety
-                    let mut c = conn.lock().unwrap();
-                    c.select_channel(profile.channel);
-                    c.send(&format!("OUTP CH{},OFF", profile.channel));
+                    let cmd = format!("OUTP CH{},OFF", profile.channel);
+                    log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
+                    send(&mut stream, &cmd);
                     break;
                 }
                 
@@ -468,9 +412,9 @@ fn simulate_channel(
 
         if v_filt <= profile.cutoff_voltage {
             log_message!(state, writers, "CH{}: Cutoff voltage reached ({:.3}V)", profile.channel, v_filt);
-            let mut c = conn.lock().unwrap();
-            c.select_channel(profile.channel);
-            c.send(&format!("OUTP CH{},OFF", profile.channel));
+            let cmd = format!("OUTP CH{},OFF", profile.channel);
+            log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
+            send(&mut stream, &cmd);
             break;
         }
 
@@ -479,18 +423,14 @@ fn simulate_channel(
         }
 
         // Set voltage - requires channel selection
-        {
-            let mut c = conn.lock().unwrap();
-            c.select_channel(profile.channel);  // Only switches if different
-            c.send(&format!("VOLT {:.3}", v_filt));
-            
-            // Debug: verify voltage was set and measure actual output (commented for cleaner output)
-            // let actual_v = c.query(&format!("MEAS:VOLT? CH{}", profile.channel));
-            // let actual_i = c.query(&format!("MEAS:CURR? CH{}", profile.channel));
-            // if now.elapsed().as_secs() % 5 == 0 {
-            //     println!("CH{}: Set={:.3}V Measured={} Current={}", 
-            //         profile.channel, v_filt, actual_v.trim(), actual_i.trim());
-            // }
+        let volt_cmds = [
+            format!("INST:NSEL {}", profile.channel),
+            format!("VOLT {:.3}", v_filt),
+        ];
+        
+        for cmd in &volt_cmds {
+            log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
+            send(&mut stream, cmd);
         }
 
         if let Some(w) = csv.as_mut() {
@@ -518,9 +458,9 @@ fn simulate_channel(
         }
 
         if !state.lock().unwrap().running {
-            let mut c = conn.lock().unwrap();
-            c.select_channel(profile.channel);
-            c.send(&format!("OUTP CH{},OFF", profile.channel));
+            let cmd = format!("OUTP CH{},OFF", profile.channel);
+            log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
+            send(&mut stream, &cmd);
             break;
         }
 
