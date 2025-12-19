@@ -190,13 +190,13 @@ dp832-battery-sim/
 
 ## 📊 Statistics
 
-- **Total Commits**: 28 (including this session: 4 commits)
+- **Total Commits**: 29 (including this session: 5 commits)
 - **Files Modified**: 5 (`main.rs`, `ui.rs`, `README.md`, `.gitignore`, `DEVELOPMENT_SUMMARY.md`)
 - **New Files Created**: 14 (profiles + examples + README files)
 - **Lines of Code**: 
-  - `main.rs`: ~565 lines
+  - `main.rs`: ~550 lines
   - `ui.rs`: ~550 lines
-  - Total: ~1115 lines of Rust code
+  - Total: ~1100 lines of Rust code
 
 ## 🚀 Usage Examples
 
@@ -236,26 +236,51 @@ VERBOSE_SCPI=1 dp832_battery_sim -p profiles/lifepo4.json
 - **l** - Clear event log window
 - **s** - Clear SCPI command log window
 
-## 📝 Recent Commits (This Session)
-
-1. **fc8627a** (NEW) - "Fix: Remove problematic *IDN? query during channel initialization"
-   - Eliminated root cause of "Command error" responses
-   - Removed unnecessary *IDN? query after channel enable
-   - Now shows informative battery profile details instead
-
-2. **bedfc74** - "fix: improve *IDN? query handling with adaptive timeouts"
-   - Adaptive timeouts based on command type
-   - Proper buffer draining after *IDN? queries
-   - Prevents "Command error" responses
-
-3. **e97bf6e** - "docs: add comprehensive README for the project"
-   - Complete documentation with examples
-   - Architecture overview
-   - Troubleshooting guide
-
-4. **3de5b27** - "chore: update .gitignore to exclude logs and editor files"
-   - Ignore CSV log files
-   - Ignore editor backup files
+### 14. **Fixed: Application Exiting Prematurely** ✓
++- **Commit**: `7509a32` - "Fix: Prevent application from exiting on SCPI errors"
++  
++- **Root Cause Fixed**:
++  - TUI was spawned as a separate thread, main thread waited for simulation threads
++  - When simulation threads encountered errors and exited, main thread would exit
++  - Application would close after 1-2 seconds if errors occurred
++  
++- **Solution Implemented**:
++  - TUI now runs in main thread (blocking), keeping application alive
++  - Simulation threads spawned in background
++  - Application stays open until user quits with 'q'
++  
++- **Retry Logic**:
++  - Added consecutive error counter (max 5 retries)
++  - On parse failure, skip iteration and retry next cycle
++  - Only stop simulation after MAX_CONSECUTIVE_ERRORS
++  - Prevents premature shutdown on transient SCPI errors
++
++## 📝 Recent Commits (This Session)
++
++1. **7509a32** (NEW) - "Fix: Prevent application from exiting on SCPI errors"
++   - Run TUI in main thread instead of spawning it
++   - Add retry logic with consecutive error counter (max 5 retries)
++   - Skip iteration and retry on parse failures
++   - Only stop simulation after persistent failures
++
++2. **fc8627a** - "Fix: Remove problematic *IDN? query during channel initialization"
++   - Eliminated root cause of "Command error" responses
++   - Removed unnecessary *IDN? query after channel enable
++   - Now shows informative battery profile details instead
++
++3. **bedfc74** - "fix: improve *IDN? query handling with adaptive timeouts"
++   - Adaptive timeouts based on command type
++   - Proper buffer draining after *IDN? queries
++   - Prevents "Command error" responses
++
++4. **e97bf6e** - "docs: add comprehensive README for the project"
++   - Complete documentation with examples
++   - Architecture overview
++   - Troubleshooting guide
++
++5. **3de5b27** - "chore: update .gitignore to exclude logs and editor files"
++   - Ignore CSV log files
++   - Ignore editor backup files
 
 ## ✨ Build Status
 
