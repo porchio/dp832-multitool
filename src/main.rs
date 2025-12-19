@@ -368,7 +368,19 @@ fn simulate_channel(
         let curr_str = query(&mut stream, curr_cmd);
         log_scpi!(state, writers, "CH{} ← {}", profile.channel, curr_str.trim());
         
-        let curr_result: Result<f64, String> = curr_str.trim().parse().map_err(|_| curr_str.clone());
+        // Check for error responses before parsing
+        let curr_result: Result<f64, String> = {
+            let trimmed = curr_str.trim();
+            if trimmed.contains("error") || trimmed.contains("Error") || trimmed.contains("ERROR") {
+                // PSU returned error - clear it and retry
+                log_message!(state, writers, "CH{}: PSU error response '{}' - clearing error state", 
+                            profile.channel, trimmed);
+                send(&mut stream, "*CLS");  // Clear error state
+                Err(trimmed.to_string())
+            } else {
+                trimmed.parse().map_err(|_| trimmed.to_string())
+            }
+        };
 
         // Handle parsing failure with retry logic
         let i = match curr_result {
