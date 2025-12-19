@@ -135,29 +135,60 @@ fn load_optional_config(path: Option<&str>) -> Config {
 struct ScpiConnection {
     stream: TcpStream,
     selected_channel: Option<u8>,
+    state: Arc<Mutex<ui::RuntimeState>>,
+    verbose_scpi: bool,
 }
 
 impl ScpiConnection {
-    fn new(stream: TcpStream) -> Self {
+    fn new(stream: TcpStream, state: Arc<Mutex<ui::RuntimeState>>) -> Self {
+        // Check if verbose SCPI logging is enabled
+        let verbose_scpi = std::env::var("VERBOSE_SCPI").is_ok();
+        
         Self {
             stream,
             selected_channel: None,
+            state,
+            verbose_scpi,
         }
     }
 
     fn select_channel(&mut self, channel: u8) {
         if self.selected_channel != Some(channel) {
-            send(&mut self.stream, &format!("INST:NSEL {}", channel));
+            let cmd = format!("INST:NSEL {}", channel);
+            if self.verbose_scpi {
+                log_message!(self.state, "→ {}", cmd);
+            }
+            send(&mut self.stream, &cmd);
             self.selected_channel = Some(channel);
         }
     }
 
     fn send(&mut self, cmd: &str) {
+        // Log important commands always, others only if verbose
+        let is_important = cmd.starts_with("OUTP") || 
+                          cmd.starts_with("CURR ") ||
+                          cmd.starts_with("*");
+        
+        if is_important || self.verbose_scpi {
+            log_message!(self.state, "→ {}", cmd);
+        }
         send(&mut self.stream, cmd);
     }
 
     fn query(&mut self, cmd: &str) -> String {
-        query(&mut self.stream, cmd)
+        // Log important queries always, others only if verbose
+        let is_important = cmd == "*IDN?" || 
+                          cmd.starts_with("SYST") ||
+                          cmd.starts_with("OUTP?");
+        
+        if is_important || self.verbose_scpi {
+            log_message!(self.state, "→ {}", cmd);
+        }
+        let response = query(&mut self.stream, cmd);
+        if is_important || self.verbose_scpi {
+            log_message!(self.state, "← {}", response.trim());
+        }
+        response
     }
 }
 
@@ -300,7 +331,7 @@ fn main() {
     });
 
     // Create shared SCPI connection with channel tracking (mutex-protected)
-    let scpi_conn = ScpiConnection::new(stream);
+    let scpi_conn = ScpiConnection::new(stream, state.clone());
     let shared_conn = Arc::new(Mutex::new(scpi_conn));
     
     // Start simulation threads for each channel
