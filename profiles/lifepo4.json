@@ -1,0 +1,25 @@
+{
+  "name": "LiFePO4 1S",
+  "channel": 1,
+
+  "capacity_ah": 3.2,
+  "internal_resistance_ohm": 0.015,
+
+  "current_limit_discharge_a": 2.0,
+  "current_limit_charge_a": 2.0,
+
+  "cutoff_voltage": 2.5,
+  "max_voltage": 3.65,
+
+  "rc_time_constant_ms": 300,
+
+  "update_interval_ms": 100,
+
+  "ocv_curve": [
+    { "soc": 1.00, "voltage": 3.40 },
+    { "soc": 0.90, "voltage": 3.32 },
+    { "soc": 0.50, "voltage": 3.30 },
+    { "soc": 0.20, "voltage": 3.25 },
+    { "soc": 0.00, "voltage": 2.80 }
+  ]
+}

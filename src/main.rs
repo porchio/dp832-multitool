@@ -87,6 +87,35 @@ fn load_config(path: &str) -> Config {
     toml::from_str(&s).expect("Invalid config file")
 }
 
+fn default_config_path() -> Option<std::path::PathBuf> {
+    let base = dirs_next::config_dir()?;
+    Some(base.join("dp832-battery").join("config.toml"))
+}
+
+fn load_optional_config(path: Option<&str>) -> Config {
+    let path = if let Some(p) = path {
+        Some(std::path::PathBuf::from(p))
+    } else {
+        default_config_path()
+    };
+
+    if let Some(path) = path {
+        if path.exists() {
+            println!("Using config file: {}", path.display());
+            let mut s = String::new();
+            std::fs::File::open(path)
+                .unwrap()
+                .read_to_string(&mut s)
+                .unwrap();
+            toml::from_str(&s).expect("Invalid config file")
+        } else {
+            Config::default()
+        }
+    } else {
+        Config::default()
+    }
+}
+
 /* ---------------- SCPI helpers ---------------- */
 
 fn send(stream: &mut TcpStream, cmd: &str) {
@@ -136,12 +165,7 @@ fn interpolate_ocv(curve: &[OcvPoint], soc: f64) -> f64 {
 fn main() {
     let args = Args::parse();
 
-    let cfg = args
-        .config
-        .as_deref()
-        .map(load_config)
-        .unwrap_or_default();
-
+    let cfg = load_optional_config(args.config.as_deref());
     // Resolve IP
     let ip = args
         .ip
