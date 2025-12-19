@@ -388,19 +388,10 @@ fn main() {
         }
     }
 
-    // Start TUI
-    let tui_state = state.clone();
-    let addr_clone = addr.clone();
-    std::thread::spawn(move || {
-        ui::run_tui(tui_state, addr_clone);
-    });
-
     // Share SCPI connection with channel tracking (mutex-protected)
     let shared_conn = Arc::new(Mutex::new(conn));
     
     // Start simulation threads for each channel
-    let mut sim_threads = Vec::new();
-    
     for profile in profiles {
         let state_clone = state.clone();
         let conn_clone = shared_conn.clone();
@@ -410,17 +401,13 @@ fn main() {
             csv::Writer::from_path(path).unwrap()
         });
 
-        let thread = std::thread::spawn(move || {
+        std::thread::spawn(move || {
             simulate_channel(state_clone, conn_clone, profile, csv_clone);
         });
-        
-        sim_threads.push(thread);
     }
 
-    // Wait for all simulation threads to complete
-    for thread in sim_threads {
-        thread.join().unwrap();
-    }
+    // Start TUI (blocking - runs until user quits)
+    ui::run_tui(state.clone(), addr.clone());
 }
 
 fn simulate_channel(
@@ -458,6 +445,8 @@ fn simulate_channel(
     let mut soc = 1.0;
     let mut last = Instant::now();
     let mut v_filt = interpolate_ocv(&profile.ocv_curve, soc);
+    let mut consecutive_errors = 0;
+    const MAX_CONSECUTIVE_ERRORS: u32 = 5;
 
     loop {
         let now = Instant::now();
@@ -472,22 +461,33 @@ fn simulate_channel(
             curr_str.trim().parse().map_err(|_| curr_str.clone())
         };
 
-        // Handle parsing failure - stop simulation if we can't read current
+        // Handle parsing failure with retry logic
         let i = match curr_result {
             Ok(current) => {
+                consecutive_errors = 0;  // Reset error counter on success
                 if current.abs() > 0.001 {
                     log_message!(state, "CH{}: Current = {:.3} A", profile.channel, current);
                 }
                 current
             }
             Err(raw_response) => {
-                log_message!(state, "CH{}: ERROR - Failed to parse current '{}'. Stopping simulation for safety.", 
-                            profile.channel, raw_response.trim());
-                // Turn off output for safety
-                let mut c = conn.lock().unwrap();
-                c.select_channel(profile.channel);
-                c.send(&format!("OUTP CH{},OFF", profile.channel));
-                break;
+                consecutive_errors += 1;
+                log_message!(state, "CH{}: ERROR #{} - Failed to parse current '{}'. Retrying...", 
+                            profile.channel, consecutive_errors, raw_response.trim());
+                
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                    log_message!(state, "CH{}: Too many consecutive errors. Stopping simulation for safety.", 
+                                profile.channel);
+                    // Turn off output for safety
+                    let mut c = conn.lock().unwrap();
+                    c.select_channel(profile.channel);
+                    c.send(&format!("OUTP CH{},OFF", profile.channel));
+                    break;
+                }
+                
+                // Skip this iteration and retry next time
+                sleep(Duration::from_millis(profile.update_interval_ms));
+                continue;
             }
         };
 
