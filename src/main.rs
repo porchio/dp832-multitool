@@ -9,6 +9,17 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+// Macro to log to both console and UI
+macro_rules! log_message {
+    ($state:expr, $($arg:tt)*) => {{
+        let msg = format!($($arg)*);
+        println!("{}", msg);
+        if let Ok(mut s) = $state.lock() {
+            s.add_log(msg);
+        }
+    }};
+}
+
 #[derive(Parser)]
 struct Args {
     /// Config file (TOML)
@@ -267,6 +278,7 @@ fn main() {
     let state = Arc::new(Mutex::new(ui::RuntimeState {
         channels: Default::default(),
         running: true,
+        log_messages: Default::default(),
     }));
 
     // Set up each channel
@@ -334,7 +346,7 @@ fn simulate_channel(
         
         // Debug: verify channel is responding
         let idn = c.query("*IDN?");
-        println!("Channel {} initialized on: {}", profile.channel, idn.trim());
+        log_message!(state, "CH{}: Initialized - {}", profile.channel, idn.trim());
     }
 
     let mut soc = 1.0;
@@ -352,11 +364,11 @@ fn simulate_channel(
             c.select_channel(profile.channel);  // Only switches if different
             let curr_str = c.query("MEAS:CURR?");
             let current: f64 = curr_str.parse().unwrap_or_else(|_| {
-                eprintln!("Channel {}: Failed to parse current '{}', using 0.0", profile.channel, curr_str);
+                log_message!(state, "CH{}: Failed to parse current '{}', using 0.0", profile.channel, curr_str);
                 0.0
             });
             if current.abs() > 0.001 {
-                println!("Channel {}: Current = {:.3} A", profile.channel, current);
+                log_message!(state, "CH{}: Current = {:.3} A", profile.channel, current);
             }
             current
         };
@@ -375,7 +387,7 @@ fn simulate_channel(
         v_filt += alpha * (v_target - v_filt);
 
         if v_filt <= profile.cutoff_voltage {
-            println!("Channel {}: Cutoff reached", profile.channel);
+            log_message!(state, "CH{}: Cutoff voltage reached ({:.3}V)", profile.channel, v_filt);
             let mut c = conn.lock().unwrap();
             c.select_channel(profile.channel);
             c.send("OUTP OFF");
@@ -435,5 +447,5 @@ fn simulate_channel(
         sleep(Duration::from_millis(profile.update_interval_ms));
     }
     
-    println!("Channel {} simulation stopped", profile.channel);
+    log_message!(state, "CH{}: Simulation stopped", profile.channel);
 }

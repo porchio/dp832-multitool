@@ -30,6 +30,17 @@ pub struct ChannelState {
 pub struct RuntimeState {
     pub channels: [ChannelState; 3],
     pub running: bool,
+    pub log_messages: VecDeque<String>,
+}
+
+impl RuntimeState {
+    pub fn add_log(&mut self, message: String) {
+        self.log_messages.push_back(message);
+        // Keep last 100 messages
+        if self.log_messages.len() > 100 {
+            self.log_messages.pop_front();
+        }
+    }
 }
 
 struct ChannelHistory {
@@ -197,7 +208,16 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                         chunks[1],
                     );
                 } else {
-                    // Split screen vertically for multiple channels
+                    // Split screen: channels + log window at bottom
+                    let vertical_split = Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Min(20),      // Main area (channels)
+                            Constraint::Length(10),   // Log window
+                        ])
+                        .split(f.size());
+
+                    // Split main area vertically for channels + footer
                     let mut constraints = vec![Constraint::Length(3)]; // Header
                     for _ in 0..num_enabled {
                         constraints.push(Constraint::Percentage((100 / num_enabled as u16).max(1)));
@@ -207,7 +227,7 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                     let main_chunks = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints(constraints)
-                        .split(f.size());
+                        .split(vertical_split[0]);
 
                     // Header
                     f.render_widget(
@@ -229,9 +249,22 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
 
                     // Footer
                     f.render_widget(
-                        Paragraph::new("q: quit   r: reset SoC (all channels)")
+                        Paragraph::new("q: quit   r: reset SoC (all channels)   l: clear log")
                             .block(Block::default().borders(Borders::ALL)),
                         main_chunks[main_chunks.len() - 1],
+                    );
+
+                    // Log window
+                    let log_text: String = s.log_messages
+                        .iter()
+                        .map(|msg| format!("{}\n", msg))
+                        .collect();
+                    
+                    f.render_widget(
+                        Paragraph::new(log_text)
+                            .block(Block::default().borders(Borders::ALL).title("Log"))
+                            .style(Style::default().fg(Color::Gray)),
+                        vertical_split[1],
                     );
                 }
             })
@@ -264,6 +297,10 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                                 ch.soc = 1.0;
                             }
                         }
+                    }
+                    KeyCode::Char('l') => {
+                        let mut s = state.lock().unwrap();
+                        s.log_messages.clear();
                     }
                     _ => {}
                 }
