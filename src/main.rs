@@ -466,11 +466,10 @@ fn simulate_channel(
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        // Lock connection, select channel (only if needed), and query current
+        // Query current directly without switching channel
         let curr_result: Result<f64, String> = {
             let mut c = conn.lock().unwrap();
-            c.select_channel(profile.channel);  // Only switches if different
-            let curr_str = c.query("MEAS:CURR?");
+            let curr_str = c.query(&format!("MEAS:CURR? CH{}", profile.channel));
             curr_str.trim().parse().map_err(|_| curr_str.clone())
         };
 
@@ -529,15 +528,15 @@ fn simulate_channel(
             v_filt = profile.max_voltage;
         }
 
-        // Lock connection, select channel (only if needed), and set voltage
+        // Set voltage - requires channel selection
         {
             let mut c = conn.lock().unwrap();
             c.select_channel(profile.channel);  // Only switches if different
             c.send(&format!("VOLT {:.3}", v_filt));
             
             // Debug: verify voltage was set and measure actual output (commented for cleaner output)
-            // let actual_v = c.query("MEAS:VOLT?");
-            // let actual_i = c.query("MEAS:CURR?");
+            // let actual_v = c.query(&format!("MEAS:VOLT? CH{}", profile.channel));
+            // let actual_i = c.query(&format!("MEAS:CURR? CH{}", profile.channel));
             // if now.elapsed().as_secs() % 5 == 0 {
             //     println!("CH{}: Set={:.3}V Measured={} Current={}", 
             //         profile.channel, v_filt, actual_v.trim(), actual_i.trim());
