@@ -8,17 +8,23 @@ use std::time::{Duration, Instant};
 
 #[derive(Parser)]
 struct Args {
-    /// DP832 IP address or hostname
-    #[arg(long, default_value = "192.168.1.100")]
-    ip: String,
+    /// Config file (TOML)
+    #[arg(long)]
+    config: Option<String>,
 
-    /// SCPI TCP port (usually 5555)
-    #[arg(long, default_value_t = 5555)]
-    port: u16,
+    /// DP832 IP address
+    #[arg(long)]
+    ip: Option<String>,
 
+    /// SCPI port
+    #[arg(long)]
+    port: Option<u16>,
+
+    /// Battery profile JSON
     #[arg(short, long)]
-    profile: String,
+    profile: Option<String>,
 
+    /// CSV log file
     #[arg(long)]
     log: Option<String>,
 }
@@ -47,6 +53,38 @@ struct BatteryProfile {
     update_interval_ms: u64,
 
     ocv_curve: Vec<OcvPoint>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct Config {
+    device: Option<DeviceConfig>,
+    battery: Option<BatteryConfig>,
+    logging: Option<LoggingConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceConfig {
+    ip: String,
+    port: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BatteryConfig {
+    profile: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LoggingConfig {
+    csv: Option<String>,
+}
+
+fn load_config(path: &str) -> Config {
+    let mut s = String::new();
+    std::fs::File::open(path)
+        .unwrap()
+        .read_to_string(&mut s)
+        .unwrap();
+    toml::from_str(&s).expect("Invalid config file")
 }
 
 /* ---------------- SCPI helpers ---------------- */
@@ -98,8 +136,40 @@ fn interpolate_ocv(curve: &[OcvPoint], soc: f64) -> f64 {
 fn main() {
     let args = Args::parse();
 
+    let cfg = args
+        .config
+        .as_deref()
+        .map(load_config)
+        .unwrap_or_default();
+
+    // Resolve IP
+    let ip = args
+        .ip
+        .or_else(|| cfg.device.as_ref().map(|d| d.ip.clone()))
+        .unwrap_or_else(|| "192.168.1.100".to_string());
+
+    // Resolve port
+    let port = args
+        .port
+        .or_else(|| cfg.device.as_ref().and_then(|d| d.port))
+        .unwrap_or(5555);
+
+    // Resolve battery profile
+    let profile_path = args
+        .profile
+        .or_else(|| cfg.battery.map(|b| b.profile))
+        .expect("Battery profile not specified");
+
+    // Resolve CSV log
+    let csv_log = args
+        .log
+        .or_else(|| cfg.logging.and_then(|l| l.csv));
+
+    println!("DP832: {}:{}", ip, port);
+    println!("Profile: {}", profile_path);
+
     let mut json = String::new();
-    File::open(&args.profile)
+    File::open(&profile_path)
         .unwrap()
         .read_to_string(&mut json)
         .unwrap();
@@ -107,9 +177,8 @@ fn main() {
     let profile: BatteryProfile = serde_json::from_str(&json).unwrap();
     println!("Loaded profile: {}", profile.name);
 
-    let addr = format!("{}:{}", args.ip, args.port);
-    println!("Connecting to {}", addr);
 
+    let addr = format!("{}:{}", ip, port);
     let mut stream = TcpStream::connect(&addr).unwrap();
 
     stream
@@ -132,7 +201,7 @@ fn main() {
     let mut last = Instant::now();
     let mut v_filt = interpolate_ocv(&profile.ocv_curve, soc);
 
-    let mut csv = args.log.map(|p| csv::Writer::from_path(p).unwrap());
+    let mut csv = csv_log.map(|p| csv::Writer::from_path(p).unwrap());
 
     loop {
         let now = Instant::now();
