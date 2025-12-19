@@ -336,17 +336,17 @@ fn simulate_channel(
     let ch_idx = (profile.channel - 1) as usize;
     
     // Initialize channel - select it once and then use simple commands
-    let init_cmds = [
-        format!("INST:NSEL {}", profile.channel),
-        "OUTP OFF".to_string(),
-        format!("CURR {:.3}", profile.current_limit_discharge_a),
-        "OUTP ON".to_string(),
-    ];
+    log_scpi!(state, writers, "CH{} → INST:NSEL {}", profile.channel, profile.channel);
+    send(&mut stream, &format!("INST:NSEL {}", profile.channel));
     
-    for cmd in &init_cmds {
-        log_scpi!(state, writers, "CH{} → {}", profile.channel, cmd);
-        send(&mut stream, cmd);
-    }
+    log_scpi!(state, writers, "CH{} → OUTP OFF", profile.channel);
+    send(&mut stream, "OUTP OFF");
+    
+    log_scpi!(state, writers, "CH{} → CURR {:.3}", profile.channel, profile.current_limit_discharge_a);
+    send(&mut stream, &format!("CURR {:.3}", profile.current_limit_discharge_a));
+    
+    log_scpi!(state, writers, "CH{} → OUTP ON", profile.channel);
+    send(&mut stream, "OUTP ON");
     
     log_message!(state, writers, "CH{}: Initialized - {} ({:.1}Ah, {:.3}Ω)", 
                 profile.channel, 
