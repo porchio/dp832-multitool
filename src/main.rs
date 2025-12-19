@@ -121,6 +121,35 @@ fn load_optional_config(path: Option<&str>) -> Config {
 
 /* ---------------- SCPI helpers ---------------- */
 
+struct ScpiConnection {
+    stream: TcpStream,
+    selected_channel: Option<u8>,
+}
+
+impl ScpiConnection {
+    fn new(stream: TcpStream) -> Self {
+        Self {
+            stream,
+            selected_channel: None,
+        }
+    }
+
+    fn select_channel(&mut self, channel: u8) {
+        if self.selected_channel != Some(channel) {
+            send(&mut self.stream, &format!("INST:NSEL {}", channel));
+            self.selected_channel = Some(channel);
+        }
+    }
+
+    fn send(&mut self, cmd: &str) {
+        send(&mut self.stream, cmd);
+    }
+
+    fn query(&mut self, cmd: &str) -> String {
+        query(&mut self.stream, cmd)
+    }
+}
+
 fn send(stream: &mut TcpStream, cmd: &str) {
     let cmd = format!("{}\n", cmd);
     stream.write_all(cmd.as_bytes()).unwrap();
@@ -258,15 +287,16 @@ fn main() {
         ui::run_tui(tui_state, addr_clone);
     });
 
-    // Create shared TCP stream for all channels (mutex-protected)
-    let shared_stream = Arc::new(Mutex::new(stream));
+    // Create shared SCPI connection with channel tracking (mutex-protected)
+    let scpi_conn = ScpiConnection::new(stream);
+    let shared_conn = Arc::new(Mutex::new(scpi_conn));
     
     // Start simulation threads for each channel
     let mut sim_threads = Vec::new();
     
     for profile in profiles {
         let state_clone = state.clone();
-        let stream_clone = shared_stream.clone();
+        let conn_clone = shared_conn.clone();
         
         let csv_clone = csv_log.as_ref().map(|p| {
             let path = format!("{}_ch{}.csv", p.trim_end_matches(".csv"), profile.channel);
@@ -274,7 +304,7 @@ fn main() {
         });
 
         let thread = std::thread::spawn(move || {
-            simulate_channel(state_clone, stream_clone, profile, csv_clone);
+            simulate_channel(state_clone, conn_clone, profile, csv_clone);
         });
         
         sim_threads.push(thread);
@@ -288,7 +318,7 @@ fn main() {
 
 fn simulate_channel(
     state: Arc<Mutex<ui::RuntimeState>>,
-    stream: Arc<Mutex<TcpStream>>,
+    conn: Arc<Mutex<ScpiConnection>>,
     profile: BatteryProfile,
     mut csv: Option<csv::Writer<File>>,
 ) {
@@ -296,14 +326,14 @@ fn simulate_channel(
     
     // Initialize channel
     {
-        let mut s = stream.lock().unwrap();
-        send(&mut s, &format!("INST:NSEL {}", profile.channel));
-        send(&mut s, "OUTP OFF");
-        send(&mut s, &format!("CURR {}", profile.current_limit_discharge_a));
-        send(&mut s, "OUTP ON");
+        let mut c = conn.lock().unwrap();
+        c.select_channel(profile.channel);
+        c.send("OUTP OFF");
+        c.send(&format!("CURR {}", profile.current_limit_discharge_a));
+        c.send("OUTP ON");
         
         // Debug: verify channel is responding
-        let idn = query(&mut s, "*IDN?");
+        let idn = c.query("*IDN?");
         println!("Channel {} initialized on: {}", profile.channel, idn.trim());
     }
 
@@ -316,11 +346,11 @@ fn simulate_channel(
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        // Lock stream, select channel, and query current
+        // Lock connection, select channel (only if needed), and query current
         let i: f64 = {
-            let mut s = stream.lock().unwrap();
-            send(&mut s, &format!("INST:NSEL {}", profile.channel));
-            let curr_str = query(&mut s, "MEAS:CURR?");
+            let mut c = conn.lock().unwrap();
+            c.select_channel(profile.channel);  // Only switches if different
+            let curr_str = c.query("MEAS:CURR?");
             let current: f64 = curr_str.parse().unwrap_or_else(|_| {
                 eprintln!("Channel {}: Failed to parse current '{}', using 0.0", profile.channel, curr_str);
                 0.0
@@ -346,9 +376,9 @@ fn simulate_channel(
 
         if v_filt <= profile.cutoff_voltage {
             println!("Channel {}: Cutoff reached", profile.channel);
-            let mut s = stream.lock().unwrap();
-            send(&mut s, &format!("INST:NSEL {}", profile.channel));
-            send(&mut s, "OUTP OFF");
+            let mut c = conn.lock().unwrap();
+            c.select_channel(profile.channel);
+            c.send("OUTP OFF");
             break;
         }
 
@@ -356,20 +386,19 @@ fn simulate_channel(
             v_filt = profile.max_voltage;
         }
 
-        // Lock stream, select channel, and set voltage
+        // Lock connection, select channel (only if needed), and set voltage
         {
-            let mut s = stream.lock().unwrap();
-            send(&mut s, &format!("INST:NSEL {}", profile.channel));
-            send(&mut s, &format!("VOLT {:.3}", v_filt));
+            let mut c = conn.lock().unwrap();
+            c.select_channel(profile.channel);  // Only switches if different
+            c.send(&format!("VOLT {:.3}", v_filt));
             
-            // Debug: verify voltage was set and measure actual output
-            let actual_v = query(&mut s, "MEAS:VOLT?");
-            let actual_i = query(&mut s, "MEAS:CURR?");
-            
-            if now.elapsed().as_secs() % 5 == 0 { // Print every 5 seconds
-                println!("CH{}: Set={:.3}V Measured={} Current={}", 
-                    profile.channel, v_filt, actual_v.trim(), actual_i.trim());
-            }
+            // Debug: verify voltage was set and measure actual output (commented for cleaner output)
+            // let actual_v = c.query("MEAS:VOLT?");
+            // let actual_i = c.query("MEAS:CURR?");
+            // if now.elapsed().as_secs() % 5 == 0 {
+            //     println!("CH{}: Set={:.3}V Measured={} Current={}", 
+            //         profile.channel, v_filt, actual_v.trim(), actual_i.trim());
+            // }
         }
 
         if let Some(w) = csv.as_mut() {
@@ -397,9 +426,9 @@ fn simulate_channel(
         }
 
         if !state.lock().unwrap().running {
-            let mut s = stream.lock().unwrap();
-            send(&mut s, &format!("INST:NSEL {}", profile.channel));
-            send(&mut s, "OUTP OFF");
+            let mut c = conn.lock().unwrap();
+            c.select_channel(profile.channel);
+            c.send("OUTP OFF");
             break;
         }
 
