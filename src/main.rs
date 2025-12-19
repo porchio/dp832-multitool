@@ -381,9 +381,18 @@ fn simulate_channel(
     {
         let mut c = conn.lock().unwrap();
         c.select_channel(profile.channel);
-        c.send("OUTP OFF");
+        
+        // Turn off output (use channel-specific command)
+        c.send(&format!("OUTP CH{},OFF", profile.channel));
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        
+        // Set current limit
         c.send(&format!("CURR {:.3}", profile.current_limit_discharge_a));
-        c.send("OUTP ON");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        
+        // Turn on output
+        c.send(&format!("OUTP CH{},ON", profile.channel));
+        std::thread::sleep(std::time::Duration::from_millis(50));
         
         // Debug: verify channel is responding
         let idn = c.query("*IDN?");
@@ -421,7 +430,7 @@ fn simulate_channel(
                 // Turn off output for safety
                 let mut c = conn.lock().unwrap();
                 c.select_channel(profile.channel);
-                c.send("OUTP OFF");
+                c.send(&format!("OUTP CH{},OFF", profile.channel));
                 break;
             }
         };
@@ -443,7 +452,7 @@ fn simulate_channel(
             log_message!(state, "CH{}: Cutoff voltage reached ({:.3}V)", profile.channel, v_filt);
             let mut c = conn.lock().unwrap();
             c.select_channel(profile.channel);
-            c.send("OUTP OFF");
+            c.send(&format!("OUTP CH{},OFF", profile.channel));
             break;
         }
 
@@ -493,7 +502,7 @@ fn simulate_channel(
         if !state.lock().unwrap().running {
             let mut c = conn.lock().unwrap();
             c.select_channel(profile.channel);
-            c.send("OUTP OFF");
+            c.send(&format!("OUTP CH{},OFF", profile.channel));
             break;
         }
 
