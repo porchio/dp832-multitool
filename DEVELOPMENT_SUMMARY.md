@@ -100,6 +100,12 @@ All requested features have been successfully implemented and committed to the r
   - `a336740` - "fix: improve TCP communication with proper timeouts and retries"
   - `b3be246` - "Fix 'Command error' issue with PSU communication"
   - `bedfc74` - "fix: improve *IDN? query handling with adaptive timeouts"
+  - `fc8627a` - "Fix: Remove problematic *IDN? query during channel initialization"
+  
+- **Root Cause Fixed**:
+  - Removed unnecessary `*IDN?` query during per-channel initialization
+  - This query was causing PSU to respond with "Command error"
+  - Error responses would then pollute subsequent `MEAS:CURR?` queries
   
 - **Adaptive Timeouts**: 
   - Longer timeouts for `*IDN?` queries (100ms delay, 500ms timeout)
@@ -184,13 +190,13 @@ dp832-battery-sim/
 
 ## 📊 Statistics
 
-- **Total Commits**: 27 (including this session: 3 new commits)
-- **Files Modified**: 4 (`main.rs`, `ui.rs`, `README.md`, `.gitignore`)
+- **Total Commits**: 28 (including this session: 4 commits)
+- **Files Modified**: 5 (`main.rs`, `ui.rs`, `README.md`, `.gitignore`, `DEVELOPMENT_SUMMARY.md`)
 - **New Files Created**: 14 (profiles + examples + README files)
 - **Lines of Code**: 
-  - `main.rs`: ~550 lines
+  - `main.rs`: ~565 lines
   - `ui.rs`: ~550 lines
-  - Total: ~1100 lines of Rust code
+  - Total: ~1115 lines of Rust code
 
 ## 🚀 Usage Examples
 
@@ -232,17 +238,22 @@ VERBOSE_SCPI=1 dp832_battery_sim -p profiles/lifepo4.json
 
 ## 📝 Recent Commits (This Session)
 
-1. **bedfc74** - "fix: improve *IDN? query handling with adaptive timeouts"
+1. **fc8627a** (NEW) - "Fix: Remove problematic *IDN? query during channel initialization"
+   - Eliminated root cause of "Command error" responses
+   - Removed unnecessary *IDN? query after channel enable
+   - Now shows informative battery profile details instead
+
+2. **bedfc74** - "fix: improve *IDN? query handling with adaptive timeouts"
    - Adaptive timeouts based on command type
    - Proper buffer draining after *IDN? queries
    - Prevents "Command error" responses
 
-2. **e97bf6e** - "docs: add comprehensive README for the project"
+3. **e97bf6e** - "docs: add comprehensive README for the project"
    - Complete documentation with examples
    - Architecture overview
    - Troubleshooting guide
 
-3. **3de5b27** - "chore: update .gitignore to exclude logs and editor files"
+4. **3de5b27** - "chore: update .gitignore to exclude logs and editor files"
    - Ignore CSV log files
    - Ignore editor backup files
 
