@@ -301,6 +301,10 @@ fn simulate_channel(
         send(&mut s, "OUTP OFF");
         send(&mut s, &format!("CURR {}", profile.current_limit_discharge_a));
         send(&mut s, "OUTP ON");
+        
+        // Debug: verify channel is responding
+        let idn = query(&mut s, "*IDN?");
+        println!("Channel {} initialized on: {}", profile.channel, idn.trim());
     }
 
     let mut soc = 1.0;
@@ -316,9 +320,15 @@ fn simulate_channel(
         let i: f64 = {
             let mut s = stream.lock().unwrap();
             send(&mut s, &format!("INST:NSEL {}", profile.channel));
-            query(&mut s, "MEAS:CURR?")
-                .parse()
-                .unwrap_or(0.0)
+            let curr_str = query(&mut s, "MEAS:CURR?");
+            let current: f64 = curr_str.parse().unwrap_or_else(|_| {
+                eprintln!("Channel {}: Failed to parse current '{}', using 0.0", profile.channel, curr_str);
+                0.0
+            });
+            if current.abs() > 0.001 {
+                println!("Channel {}: Current = {:.3} A", profile.channel, current);
+            }
+            current
         };
 
         // Discharge / charge integration
@@ -351,6 +361,15 @@ fn simulate_channel(
             let mut s = stream.lock().unwrap();
             send(&mut s, &format!("INST:NSEL {}", profile.channel));
             send(&mut s, &format!("VOLT {:.3}", v_filt));
+            
+            // Debug: verify voltage was set and measure actual output
+            let actual_v = query(&mut s, "MEAS:VOLT?");
+            let actual_i = query(&mut s, "MEAS:CURR?");
+            
+            if now.elapsed().as_secs() % 5 == 0 { // Print every 5 seconds
+                println!("CH{}: Set={:.3}V Measured={} Current={}", 
+                    profile.channel, v_filt, actual_v.trim(), actual_i.trim());
+            }
         }
 
         if let Some(w) = csv.as_mut() {
