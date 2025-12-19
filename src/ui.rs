@@ -83,8 +83,11 @@ impl HistoryData {
         }
     }
 
-    fn add_sample(&mut self, channel: usize, voltage: f64, current: f64, power: f64, dt: f64) {
+    fn update_time(&mut self, dt: f64) {
         self.time += dt;
+    }
+
+    fn add_sample(&mut self, channel: usize, voltage: f64, current: f64, power: f64) {
         if channel < 3 {
             self.channels[channel].add_sample(self.time, voltage, current, power, self.max_points);
         }
@@ -237,9 +240,10 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
         // Update history every 100ms
         if dt >= 0.1 {
             let s = state.lock().unwrap().clone();
+            history.update_time(dt);
             for (ch_num, ch) in s.channels.iter().enumerate() {
                 if ch.enabled {
-                    history.add_sample(ch_num, ch.voltage, ch.current, ch.power, dt);
+                    history.add_sample(ch_num, ch.voltage, ch.current, ch.power);
                 }
             }
             last_update = now;
