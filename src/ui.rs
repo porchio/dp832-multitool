@@ -31,6 +31,7 @@ pub struct RuntimeState {
     pub channels: [ChannelState; 3],
     pub running: bool,
     pub log_messages: VecDeque<String>,
+    pub scpi_log_messages: VecDeque<String>,
 }
 
 impl RuntimeState {
@@ -39,6 +40,14 @@ impl RuntimeState {
         // Keep last 100 messages
         if self.log_messages.len() > 100 {
             self.log_messages.pop_front();
+        }
+    }
+    
+    pub fn add_scpi_log(&mut self, message: String) {
+        self.scpi_log_messages.push_back(message);
+        // Keep last 200 SCPI messages (more detailed)
+        if self.scpi_log_messages.len() > 200 {
+            self.scpi_log_messages.pop_front();
         }
     }
 }
@@ -208,12 +217,12 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                         chunks[1],
                     );
                 } else {
-                    // Split screen: channels + log window at bottom
+                    // Split screen: channels + two log windows at bottom
                     let vertical_split = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([
                             Constraint::Min(20),      // Main area (channels)
-                            Constraint::Length(10),   // Log window
+                            Constraint::Length(10),   // Log windows
                         ])
                         .split(f.size());
 
@@ -249,12 +258,21 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
 
                     // Footer
                     f.render_widget(
-                        Paragraph::new("q: quit   r: reset SoC (all channels)   l: clear log")
+                        Paragraph::new("q: quit   r: reset SoC   l: clear event log   s: clear SCPI log")
                             .block(Block::default().borders(Borders::ALL)),
                         main_chunks[main_chunks.len() - 1],
                     );
 
-                    // Log window
+                    // Split bottom area for two log windows side by side
+                    let log_split = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([
+                            Constraint::Percentage(50),  // Event log
+                            Constraint::Percentage(50),  // SCPI log
+                        ])
+                        .split(vertical_split[1]);
+
+                    // Event log window
                     let log_text: String = s.log_messages
                         .iter()
                         .map(|msg| format!("{}\n", msg))
@@ -262,9 +280,22 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                     
                     f.render_widget(
                         Paragraph::new(log_text)
-                            .block(Block::default().borders(Borders::ALL).title("Log"))
+                            .block(Block::default().borders(Borders::ALL).title("Event Log"))
                             .style(Style::default().fg(Color::Gray)),
-                        vertical_split[1],
+                        log_split[0],
+                    );
+
+                    // SCPI log window
+                    let scpi_log_text: String = s.scpi_log_messages
+                        .iter()
+                        .map(|msg| format!("{}\n", msg))
+                        .collect();
+                    
+                    f.render_widget(
+                        Paragraph::new(scpi_log_text)
+                            .block(Block::default().borders(Borders::ALL).title("SCPI Commands"))
+                            .style(Style::default().fg(Color::DarkGray)),
+                        log_split[1],
                     );
                 }
             })
@@ -301,6 +332,10 @@ pub fn run_tui(state: Arc<Mutex<RuntimeState>>, addr: String) {
                     KeyCode::Char('l') => {
                         let mut s = state.lock().unwrap();
                         s.log_messages.clear();
+                    }
+                    KeyCode::Char('s') => {
+                        let mut s = state.lock().unwrap();
+                        s.scpi_log_messages.clear();
                     }
                     _ => {}
                 }

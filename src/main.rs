@@ -9,13 +9,22 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-// Macro to log to both console and UI
+// Macro to log to UI only (no console output that messes up TUI)
 macro_rules! log_message {
     ($state:expr, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
-        println!("{}", msg);
         if let Ok(mut s) = $state.lock() {
             s.add_log(msg);
+        }
+    }};
+}
+
+// Macro to log SCPI commands to separate SCPI log
+macro_rules! log_scpi {
+    ($state:expr, $($arg:tt)*) => {{
+        let msg = format!($($arg)*);
+        if let Ok(mut s) = $state.lock() {
+            s.add_scpi_log(msg);
         }
     }};
 }
@@ -156,7 +165,7 @@ impl ScpiConnection {
         if self.selected_channel != Some(channel) {
             let cmd = format!("INST:NSEL {}", channel);
             if self.verbose_scpi {
-                log_message!(self.state, "→ {}", cmd);
+                log_scpi!(self.state, "→ {}", cmd);
             }
             send(&mut self.stream, &cmd);
             self.selected_channel = Some(channel);
@@ -170,7 +179,7 @@ impl ScpiConnection {
                           cmd.starts_with("*");
         
         if is_important || self.verbose_scpi {
-            log_message!(self.state, "→ {}", cmd);
+            log_scpi!(self.state, "→ {}", cmd);
         }
         send(&mut self.stream, cmd);
     }
@@ -182,11 +191,11 @@ impl ScpiConnection {
                           cmd.starts_with("OUTP?");
         
         if is_important || self.verbose_scpi {
-            log_message!(self.state, "→ {}", cmd);
+            log_scpi!(self.state, "→ {}", cmd);
         }
         let response = query(&mut self.stream, cmd);
         if is_important || self.verbose_scpi {
-            log_message!(self.state, "← {}", response.trim());
+            log_scpi!(self.state, "← {}", response.trim());
         }
         response
     }
@@ -310,6 +319,7 @@ fn main() {
         channels: Default::default(),
         running: true,
         log_messages: Default::default(),
+        scpi_log_messages: Default::default(),
     }));
 
     // Set up each channel
