@@ -321,7 +321,7 @@ fn main() {
     println!("Active channels: {}", profiles.len());
 
     let addr = format!("{}:{}", ip, port);
-    let mut stream = TcpStream::connect(&addr).unwrap();
+    let stream = TcpStream::connect(&addr).unwrap();
 
     // Set to non-blocking mode with manual timeout handling
     stream.set_nonblocking(true).unwrap();
