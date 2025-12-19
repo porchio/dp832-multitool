@@ -400,18 +400,30 @@ fn simulate_channel(
         last = now;
 
         // Lock connection, select channel (only if needed), and query current
-        let i: f64 = {
+        let curr_result: Result<f64, String> = {
             let mut c = conn.lock().unwrap();
             c.select_channel(profile.channel);  // Only switches if different
             let curr_str = c.query("MEAS:CURR?");
-            let current: f64 = curr_str.parse().unwrap_or_else(|_| {
-                log_message!(state, "CH{}: Failed to parse current '{}', using 0.0", profile.channel, curr_str);
-                0.0
-            });
-            if current.abs() > 0.001 {
-                log_message!(state, "CH{}: Current = {:.3} A", profile.channel, current);
+            curr_str.trim().parse().map_err(|_| curr_str.clone())
+        };
+
+        // Handle parsing failure - stop simulation if we can't read current
+        let i = match curr_result {
+            Ok(current) => {
+                if current.abs() > 0.001 {
+                    log_message!(state, "CH{}: Current = {:.3} A", profile.channel, current);
+                }
+                current
             }
-            current
+            Err(raw_response) => {
+                log_message!(state, "CH{}: ERROR - Failed to parse current '{}'. Stopping simulation for safety.", 
+                            profile.channel, raw_response.trim());
+                // Turn off output for safety
+                let mut c = conn.lock().unwrap();
+                c.select_channel(profile.channel);
+                c.send("OUTP OFF");
+                break;
+            }
         };
 
         // Discharge / charge integration
