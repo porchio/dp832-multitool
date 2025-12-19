@@ -12,6 +12,8 @@ use ratatui::{
     Terminal,
 };
 use std::collections::VecDeque;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -32,6 +34,51 @@ pub struct RuntimeState {
     pub running: bool,
     pub log_messages: VecDeque<String>,
     pub scpi_log_messages: VecDeque<String>,
+}
+
+pub struct LogWriters {
+    event_log: Option<File>,
+    scpi_log: Option<File>,
+}
+
+impl LogWriters {
+    pub fn new() -> Self {
+        // Create timestamped log files
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        
+        let event_log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(format!("logs/event_{}.log", timestamp))
+            .ok();
+            
+        let scpi_log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(format!("logs/scpi_{}.log", timestamp))
+            .ok();
+        
+        Self {
+            event_log,
+            scpi_log,
+        }
+    }
+    
+    pub fn write_event(&mut self, message: &str) {
+        if let Some(ref mut f) = self.event_log {
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+            let _ = writeln!(f, "[{}] {}", timestamp, message);
+            let _ = f.flush();
+        }
+    }
+    
+    pub fn write_scpi(&mut self, message: &str) {
+        if let Some(ref mut f) = self.scpi_log {
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+            let _ = writeln!(f, "[{}] {}", timestamp, message);
+            let _ = f.flush();
+        }
+    }
 }
 
 impl RuntimeState {

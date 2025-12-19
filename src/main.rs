@@ -11,20 +11,26 @@ use std::time::{Duration, Instant};
 
 // Macro to log to UI only (no console output that messes up TUI)
 macro_rules! log_message {
-    ($state:expr, $($arg:tt)*) => {{
+    ($state:expr, $writers:expr, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
         if let Ok(mut s) = $state.lock() {
-            s.add_log(msg);
+            s.add_log(msg.clone());
+        }
+        if let Ok(mut w) = $writers.lock() {
+            w.write_event(&msg);
         }
     }};
 }
 
 // Macro to log SCPI commands to separate SCPI log
 macro_rules! log_scpi {
-    ($state:expr, $($arg:tt)*) => {{
+    ($state:expr, $writers:expr, $($arg:tt)*) => {{
         let msg = format!($($arg)*);
         if let Ok(mut s) = $state.lock() {
-            s.add_scpi_log(msg);
+            s.add_scpi_log(msg.clone());
+        }
+        if let Ok(mut w) = $writers.lock() {
+            w.write_scpi(&msg);
         }
     }};
 }
@@ -145,11 +151,12 @@ struct ScpiConnection {
     stream: TcpStream,
     selected_channel: Option<u8>,
     state: Arc<Mutex<ui::RuntimeState>>,
+    writers: Arc<Mutex<ui::LogWriters>>,
     verbose_scpi: bool,
 }
 
 impl ScpiConnection {
-    fn new(stream: TcpStream, state: Arc<Mutex<ui::RuntimeState>>) -> Self {
+    fn new(stream: TcpStream, state: Arc<Mutex<ui::RuntimeState>>, writers: Arc<Mutex<ui::LogWriters>>) -> Self {
         // Check if verbose SCPI logging is enabled
         let verbose_scpi = std::env::var("VERBOSE_SCPI").is_ok();
         
@@ -157,6 +164,7 @@ impl ScpiConnection {
             stream,
             selected_channel: None,
             state,
+            writers,
             verbose_scpi,
         }
     }
@@ -165,7 +173,7 @@ impl ScpiConnection {
         if self.selected_channel != Some(channel) {
             let cmd = format!("INST:NSEL {}", channel);
             // Always log channel selection
-            log_scpi!(self.state, "→ {}", cmd);
+            log_scpi!(self.state, self.writers, "→ {}", cmd);
             send(&mut self.stream, &cmd);
             self.selected_channel = Some(channel);
         }
@@ -179,7 +187,7 @@ impl ScpiConnection {
                           cmd.starts_with("*");
         
         if is_important || self.verbose_scpi {
-            log_scpi!(self.state, "→ {}", cmd);
+            log_scpi!(self.state, self.writers, "→ {}", cmd);
         }
         send(&mut self.stream, cmd);
     }
@@ -192,11 +200,11 @@ impl ScpiConnection {
                           cmd.starts_with("OUTP?");
         
         if is_important || self.verbose_scpi {
-            log_scpi!(self.state, "→ {}", cmd);
+            log_scpi!(self.state, self.writers, "→ {}", cmd);
         }
         let response = query(&mut self.stream, cmd);
         if is_important || self.verbose_scpi {
-            log_scpi!(self.state, "← {}", response.trim());
+            log_scpi!(self.state, self.writers, "← {}", response.trim());
         }
         response
     }
@@ -362,8 +370,11 @@ fn main() {
         scpi_log_messages: Default::default(),
     }));
 
+    // Initialize log writers
+    let writers = Arc::new(Mutex::new(ui::LogWriters::new()));
+
     // Create SCPI connection early (with logging support)
-    let scpi_conn = ScpiConnection::new(stream, state.clone());
+    let scpi_conn = ScpiConnection::new(stream, state.clone(), writers.clone());
     let mut conn = scpi_conn;
     
     // Clear errors and get ID (now with logging)
@@ -394,6 +405,7 @@ fn main() {
     // Start simulation threads for each channel
     for profile in profiles {
         let state_clone = state.clone();
+        let writers_clone = writers.clone();
         let conn_clone = shared_conn.clone();
         
         let csv_clone = csv_log.as_ref().map(|p| {
@@ -402,7 +414,7 @@ fn main() {
         });
 
         std::thread::spawn(move || {
-            simulate_channel(state_clone, conn_clone, profile, csv_clone);
+            simulate_channel(state_clone, writers_clone, conn_clone, profile, csv_clone);
         });
     }
 
@@ -412,6 +424,7 @@ fn main() {
 
 fn simulate_channel(
     state: Arc<Mutex<ui::RuntimeState>>,
+    writers: Arc<Mutex<ui::LogWriters>>,
     conn: Arc<Mutex<ScpiConnection>>,
     profile: BatteryProfile,
     mut csv: Option<csv::Writer<File>>,
@@ -435,7 +448,7 @@ fn simulate_channel(
         c.send(&format!("OUTP CH{},ON", profile.channel));
         std::thread::sleep(std::time::Duration::from_millis(200));
         
-        log_message!(state, "CH{}: Initialized - {} ({:.1}Ah, {:.3}Ω)", 
+        log_message!(state, writers, "CH{}: Initialized - {} ({:.1}Ah, {:.3}Ω)", 
                     profile.channel, 
                     profile.name,
                     profile.capacity_ah,
@@ -466,17 +479,17 @@ fn simulate_channel(
             Ok(current) => {
                 consecutive_errors = 0;  // Reset error counter on success
                 if current.abs() > 0.001 {
-                    log_message!(state, "CH{}: Current = {:.3} A", profile.channel, current);
+                    log_message!(state, writers, "CH{}: Current = {:.3} A", profile.channel, current);
                 }
                 current
             }
             Err(raw_response) => {
                 consecutive_errors += 1;
-                log_message!(state, "CH{}: ERROR #{} - Failed to parse current '{}'. Retrying...", 
+                log_message!(state, writers, "CH{}: ERROR #{} - Failed to parse current '{}'. Retrying...", 
                             profile.channel, consecutive_errors, raw_response.trim());
                 
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-                    log_message!(state, "CH{}: Too many consecutive errors. Stopping simulation for safety.", 
+                    log_message!(state, writers, "CH{}: Too many consecutive errors. Stopping simulation for safety.", 
                                 profile.channel);
                     // Turn off output for safety
                     let mut c = conn.lock().unwrap();
@@ -505,7 +518,7 @@ fn simulate_channel(
         v_filt += alpha * (v_target - v_filt);
 
         if v_filt <= profile.cutoff_voltage {
-            log_message!(state, "CH{}: Cutoff voltage reached ({:.3}V)", profile.channel, v_filt);
+            log_message!(state, writers, "CH{}: Cutoff voltage reached ({:.3}V)", profile.channel, v_filt);
             let mut c = conn.lock().unwrap();
             c.select_channel(profile.channel);
             c.send(&format!("OUTP CH{},OFF", profile.channel));
@@ -565,5 +578,5 @@ fn simulate_channel(
         sleep(Duration::from_millis(profile.update_interval_ms));
     }
     
-    log_message!(state, "CH{}: Simulation stopped", profile.channel);
+    log_message!(state, writers, "CH{}: Simulation stopped", profile.channel);
 }
