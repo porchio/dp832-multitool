@@ -74,26 +74,13 @@ impl DP832Controller {
         
         let ch_name = format!("CH{}", channel);
         
-        // Read voltage setpoint
-        send(&mut self.stream, &format!("INST:NSEL {}", channel));
-        let v_set_str = query(&mut self.stream, "VOLT?");
-        if let Ok(v) = v_set_str.trim().parse::<f64>() {
-            self.channels[ch_idx].voltage_set = v;
-        }
-        
-        // Read current setpoint
-        let i_set_str = query(&mut self.stream, "CURR?");
-        if let Ok(i) = i_set_str.trim().parse::<f64>() {
-            self.channels[ch_idx].current_set = i;
-        }
-        
-        // Read actual voltage
+        // Read actual voltage (no channel switch needed)
         let v_act_str = query(&mut self.stream, &format!("MEAS:VOLT? {}", ch_name));
         if let Ok(v) = v_act_str.trim().parse::<f64>() {
             self.channels[ch_idx].voltage_actual = v;
         }
         
-        // Read actual current
+        // Read actual current (no channel switch needed)
         let i_act_str = query(&mut self.stream, &format!("MEAS:CURR? {}", ch_name));
         if let Ok(i) = i_act_str.trim().parse::<f64>() {
             self.channels[ch_idx].current_actual = i;
@@ -103,9 +90,22 @@ impl DP832Controller {
         self.channels[ch_idx].power_actual = 
             self.channels[ch_idx].voltage_actual * self.channels[ch_idx].current_actual;
         
-        // Read output state
+        // Read output state (no channel switch needed)
         let out_str = query(&mut self.stream, &format!("OUTP? {}", ch_name));
         self.channels[ch_idx].enabled = out_str.trim() == "ON";
+        
+        // Read voltage and current setpoints (requires channel switch)
+        // Only switch channel once for both setpoint reads
+        send(&mut self.stream, &format!("INST:NSEL {}", channel));
+        let v_set_str = query(&mut self.stream, "VOLT?");
+        if let Ok(v) = v_set_str.trim().parse::<f64>() {
+            self.channels[ch_idx].voltage_set = v;
+        }
+        
+        let i_set_str = query(&mut self.stream, "CURR?");
+        if let Ok(i) = i_set_str.trim().parse::<f64>() {
+            self.channels[ch_idx].current_set = i;
+        }
         
         Ok(())
     }
