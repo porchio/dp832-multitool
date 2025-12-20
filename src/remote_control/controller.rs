@@ -186,7 +186,7 @@ impl DP832Controller {
         }
         
         let state = if enabled { "ON" } else { "OFF" };
-        let cmd = format!("OUTP {},{}", state, format!("CH{}", channel));
+        let cmd = format!("OUTP CH{},{}", channel, state);
         self.log_scpi(&cmd);
         send(&mut self.stream, &cmd);
         
