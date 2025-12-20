@@ -18,6 +18,29 @@ The binaries will be in:
 - ``target/release/battery-sim`` - Battery simulator
 - ``target/release/remote-control`` - Remote control interface
 
+Screenshots
+-----------
+
+Battery Simulator Interface
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. image:: screenshots/battery-sim-three-channels.png
+   :alt: Battery Simulator - Three Channels
+   :width: 100%
+   :align: center
+
+*Three-channel battery simulation showing real-time voltage, current, and power graphs with event and SCPI logs*
+
+Remote Control Interface
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. image:: screenshots/remote-control-main.png
+   :alt: Remote Control Interface
+   :width: 100%
+   :align: center
+
+*Remote control interface with real-time channel monitoring and control*
+
 Tools
 -----
 

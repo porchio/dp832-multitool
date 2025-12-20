@@ -22,6 +22,9 @@ extensions = []
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'target', 'logs']
 
+# Suppress warnings for missing images (screenshots may not be present yet)
+suppress_warnings = ['image.not_readable']
+
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 

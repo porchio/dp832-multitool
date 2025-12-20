@@ -6,6 +6,39 @@ A comprehensive toolkit for the Rigol DP832 power supply unit, featuring:
 1. **Battery Simulator**: Real-time battery simulation with advanced modeling
 2. **Remote Control Interface**: Complete remote control of all PSU functions
 
+Screenshots
+-----------
+
+Battery Simulator
+~~~~~~~~~~~~~~~~~
+
+.. image:: screenshots/battery-sim-single-channel.png
+   :alt: Battery Simulator - Single Channel
+   :width: 100%
+   :align: center
+
+*Battery simulator with single LiFePO4 channel showing real-time graphs, SoC gauge, and log windows*
+
+.. image:: screenshots/battery-sim-three-channels.png
+   :alt: Battery Simulator - Three Channels
+   :width: 100%
+   :align: center
+
+*Three-channel battery simulation with different chemistry profiles running simultaneously*
+
+Remote Control Interface
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. image:: screenshots/remote-control-main.png
+   :alt: Remote Control Interface
+   :width: 100%
+   :align: center
+
+*Remote control interface showing all three channels with real-time monitoring and control*
+
+.. note::
+   Screenshots are located in the ``screenshots/`` directory. See `screenshots/README.rst <screenshots/README.rst>`_ for information on capturing and adding screenshots.
+
 Tools
 -----
 

@@ -7,6 +7,39 @@ Overview
 
 The DP832 Remote Control provides a complete terminal-based interface for controlling and monitoring the Rigol DP832 triple-output power supply. It offers real-time measurements, interactive control, and comprehensive logging capabilities.
 
+Screenshots
+===========
+
+Main Interface
+--------------
+
+.. image:: screenshots/remote-control-main.png
+   :alt: Remote Control Main Interface
+   :width: 100%
+   :align: center
+
+*Remote control interface showing all three channels with real-time measurements and status indicators*
+
+Editing Values
+--------------
+
+.. image:: screenshots/remote-control-editing.png
+   :alt: Remote Control - Editing Values
+   :width: 100%
+   :align: center
+
+*Voltage or current editing dialog with selected channel highlighted*
+
+All Channels Active
+-------------------
+
+.. image:: screenshots/remote-control-all-channels-on.png
+   :alt: Remote Control - All Channels Active
+   :width: 100%
+   :align: center
+
+*All three channels enabled with live measurements and power calculations*
+
 Features
 ========
 
