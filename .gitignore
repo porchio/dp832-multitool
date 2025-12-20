@@ -8,3 +8,8 @@ logs/*.csv
 *.bak
 *~
 .*.swp
+
+# Sphinx documentation build artifacts
+_build/
+_static/
+_templates/
