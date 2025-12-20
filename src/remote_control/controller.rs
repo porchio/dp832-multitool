@@ -141,17 +141,14 @@ impl DP832Controller {
             return Ok(());
         }
         
-        // Switch to channel
-        let cmd = format!("INST:NSEL {}", channel);
-        self.log_scpi(&cmd);
-        send(&mut self.stream, &cmd);
-        
-        // Set voltage
-        let cmd = format!("VOLT {:.3}", voltage);
-        self.log_scpi(&cmd);
-        send(&mut self.stream, &cmd);
-        
+        // Use APPL command to set voltage without switching channel
+        // APPL CH1,<voltage>,<current>
         let ch_idx = (channel - 1) as usize;
+        let current = self.channels[ch_idx].current_set;
+        let cmd = format!("APPL CH{},{:.3},{:.3}", channel, voltage, current);
+        self.log_scpi(&cmd);
+        send(&mut self.stream, &cmd);
+        
         self.channels[ch_idx].voltage_set = voltage;
         
         Ok(())
@@ -163,17 +160,14 @@ impl DP832Controller {
             return Ok(());
         }
         
-        // Switch to channel
-        let cmd = format!("INST:NSEL {}", channel);
-        self.log_scpi(&cmd);
-        send(&mut self.stream, &cmd);
-        
-        // Set current
-        let cmd = format!("CURR {:.3}", current);
-        self.log_scpi(&cmd);
-        send(&mut self.stream, &cmd);
-        
+        // Use APPL command to set current without switching channel
+        // APPL CH1,<voltage>,<current>
         let ch_idx = (channel - 1) as usize;
+        let voltage = self.channels[ch_idx].voltage_set;
+        let cmd = format!("APPL CH{},{:.3},{:.3}", channel, voltage, current);
+        self.log_scpi(&cmd);
+        send(&mut self.stream, &cmd);
+        
         self.channels[ch_idx].current_set = current;
         
         Ok(())
@@ -192,6 +186,34 @@ impl DP832Controller {
         
         let ch_idx = (channel - 1) as usize;
         self.channels[ch_idx].enabled = enabled;
+        
+        Ok(())
+    }
+    
+    /// Enable all channels at once
+    pub fn enable_all_channels(&mut self) -> Result<(), std::io::Error> {
+        let cmd = "OUTP ALL,ON";
+        self.log_scpi(cmd);
+        send(&mut self.stream, cmd);
+        
+        // Update all channel states
+        for ch in 0..3 {
+            self.channels[ch].enabled = true;
+        }
+        
+        Ok(())
+    }
+    
+    /// Disable all channels at once
+    pub fn disable_all_channels(&mut self) -> Result<(), std::io::Error> {
+        let cmd = "OUTP ALL,OFF";
+        self.log_scpi(cmd);
+        send(&mut self.stream, cmd);
+        
+        // Update all channel states
+        for ch in 0..3 {
+            self.channels[ch].enabled = false;
+        }
         
         Ok(())
     }

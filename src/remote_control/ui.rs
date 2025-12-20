@@ -51,7 +51,7 @@ impl RemoteControlUI {
             selected_channel: 0,
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
-            status_message: String::from("Ready. Use ↑/↓ to select channel, V/C to edit, SPACE to toggle output, R to refresh, Q to quit"),
+            status_message: String::from("Ready. Use ↑/↓ to select channel, V/C to edit, SPACE to toggle output, A to enable all, R to refresh, Q to quit"),
             last_update: Instant::now(),
             update_interval: Duration::from_secs(2), // Update every 2 seconds instead of constantly
             event_log: VecDeque::new(),
@@ -165,6 +165,19 @@ impl RemoteControlUI {
                                         self.add_event_log(msg);
                                         // Update state immediately
                                         self.controller.update_channel(ch).ok();
+                                    }
+                                }
+                                KeyCode::Char('a') | KeyCode::Char('A') => {
+                                    if let Err(e) = self.controller.enable_all_channels() {
+                                        let msg = format!("Error enabling all channels: {}", e);
+                                        self.status_message = msg.clone();
+                                        self.add_event_log(msg);
+                                    } else {
+                                        let msg = "All channels enabled".to_string();
+                                        self.status_message = msg.clone();
+                                        self.add_event_log(msg);
+                                        // Update all channel states immediately
+                                        self.controller.update_all_channels().ok();
                                     }
                                 }
                                 KeyCode::Char('l') | KeyCode::Char('L') => {
@@ -341,6 +354,8 @@ impl RemoteControlUI {
             Line::from(vec![
                 Span::styled(" SPC  ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
                 Span::raw("Toggle Output     "),
+                Span::styled("  A  ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw("Enable All      "),
                 Span::styled("  R  ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
                 Span::raw("Refresh         "),
                 Span::styled("  Q  ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
