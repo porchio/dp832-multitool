@@ -4,12 +4,14 @@
 
 use std::net::TcpStream;
 use std::time::Duration;
+use std::sync::mpsc::Sender;
 use crate::scpi::{send, query};
 
 pub struct DP832Controller {
     stream: TcpStream,
     pub channels: [ChannelState; 3],
     pub device_id: String,
+    scpi_logger: Option<Sender<String>>,
 }
 
 #[derive(Clone)]
@@ -49,12 +51,25 @@ impl DP832Controller {
             stream,
             channels: Default::default(),
             device_id,
+            scpi_logger: None,
         };
         
         // Read initial state
         controller.update_all_channels()?;
         
         Ok(controller)
+    }
+    
+    /// Set SCPI logger sender
+    pub fn set_scpi_logger(&mut self, sender: Sender<String>) {
+        self.scpi_logger = Some(sender);
+    }
+    
+    /// Log SCPI command
+    fn log_scpi(&mut self, cmd: &str) {
+        if let Some(ref sender) = self.scpi_logger {
+            let _ = sender.send(cmd.to_string());
+        }
     }
     
     /// Update measurements for all channels
@@ -76,13 +91,17 @@ impl DP832Controller {
         let ch_name = format!("CH{}", channel);
         
         // Read actual voltage (no channel switch needed)
-        let v_act_str = query(&mut self.stream, &format!("MEAS:VOLT? {}", ch_name));
+        let cmd = format!("MEAS:VOLT? {}", ch_name);
+        self.log_scpi(&cmd);
+        let v_act_str = query(&mut self.stream, &cmd);
         if let Ok(v) = v_act_str.trim().parse::<f64>() {
             self.channels[ch_idx].voltage_actual = v;
         }
         
         // Read actual current (no channel switch needed)
-        let i_act_str = query(&mut self.stream, &format!("MEAS:CURR? {}", ch_name));
+        let cmd = format!("MEAS:CURR? {}", ch_name);
+        self.log_scpi(&cmd);
+        let i_act_str = query(&mut self.stream, &cmd);
         if let Ok(i) = i_act_str.trim().parse::<f64>() {
             self.channels[ch_idx].current_actual = i;
         }
@@ -92,13 +111,17 @@ impl DP832Controller {
             self.channels[ch_idx].voltage_actual * self.channels[ch_idx].current_actual;
         
         // Read output state (no channel switch needed)
-        let out_str = query(&mut self.stream, &format!("OUTP? {}", ch_name));
+        let cmd = format!("OUTP? {}", ch_name);
+        self.log_scpi(&cmd);
+        let out_str = query(&mut self.stream, &cmd);
         self.channels[ch_idx].enabled = out_str.trim() == "ON";
         
         // Read voltage and current setpoints using APPL? command
         // This avoids switching the active channel on the PSU
         // APPL? returns format: "CH1,3.300,2.000,ON" or similar
-        let appl_str = query(&mut self.stream, &format!("APPL? {}", ch_name));
+        let cmd = format!("APPL? {}", ch_name);
+        self.log_scpi(&cmd);
+        let appl_str = query(&mut self.stream, &cmd);
         let parts: Vec<&str> = appl_str.split(',').collect();
         if parts.len() >= 3 {
             if let Ok(v) = parts[1].trim().parse::<f64>() {
@@ -118,8 +141,15 @@ impl DP832Controller {
             return Ok(());
         }
         
-        send(&mut self.stream, &format!("INST:NSEL {}", channel));
-        send(&mut self.stream, &format!("VOLT {:.3}", voltage));
+        // Switch to channel
+        let cmd = format!("INST:NSEL {}", channel);
+        self.log_scpi(&cmd);
+        send(&mut self.stream, &cmd);
+        
+        // Set voltage
+        let cmd = format!("VOLT {:.3}", voltage);
+        self.log_scpi(&cmd);
+        send(&mut self.stream, &cmd);
         
         let ch_idx = (channel - 1) as usize;
         self.channels[ch_idx].voltage_set = voltage;
@@ -133,8 +163,15 @@ impl DP832Controller {
             return Ok(());
         }
         
-        send(&mut self.stream, &format!("INST:NSEL {}", channel));
-        send(&mut self.stream, &format!("CURR {:.3}", current));
+        // Switch to channel
+        let cmd = format!("INST:NSEL {}", channel);
+        self.log_scpi(&cmd);
+        send(&mut self.stream, &cmd);
+        
+        // Set current
+        let cmd = format!("CURR {:.3}", current);
+        self.log_scpi(&cmd);
+        send(&mut self.stream, &cmd);
         
         let ch_idx = (channel - 1) as usize;
         self.channels[ch_idx].current_set = current;
@@ -149,7 +186,9 @@ impl DP832Controller {
         }
         
         let state = if enabled { "ON" } else { "OFF" };
-        send(&mut self.stream, &format!("OUTP {},{}", state, format!("CH{}", channel)));
+        let cmd = format!("OUTP {},{}", state, format!("CH{}", channel));
+        self.log_scpi(&cmd);
+        send(&mut self.stream, &cmd);
         
         let ch_idx = (channel - 1) as usize;
         self.channels[ch_idx].enabled = enabled;
