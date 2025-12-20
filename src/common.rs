@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2024 Marcus Hoffmann
+
 /// Common utilities and types shared across modules
 
 use serde::Deserialize;

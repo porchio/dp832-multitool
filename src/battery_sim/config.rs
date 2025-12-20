@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2024 Marcus Hoffmann
+
 /// Battery simulator configuration
 
 use serde::Deserialize;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2024 Marcus Hoffmann
+
 /// SCPI Communication Module
 /// 
 /// Provides low-level SCPI communication primitives for the DP832 power supply.

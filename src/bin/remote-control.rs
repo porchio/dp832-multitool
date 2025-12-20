@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (C) 2024 Marcus Hoffmann
+
 /// DP832 Remote Control Interface
 /// 
 /// Complete remote control interface for the Rigol DP832 power supply
