@@ -1,6 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
-# Copyright (C) 2025 Marcus Folkesson
-
 {
   "name": "Li-ion 18650",
   "channel": 2,

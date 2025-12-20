@@ -353,6 +353,16 @@ The ``examples/`` directory contains ready-to-use configuration files:
 
 See `examples/README.rst <examples/README.rst>`_ for detailed usage.
 
+Documentation
+-------------
+
+For complete documentation, see the `doc/ <doc/>`_ directory:
+
+- **Quick Start Guide**: `doc/QUICK_START.rst <doc/QUICK_START.rst>`_
+- **Remote Control Interface**: `doc/REMOTE_CONTROL.rst <doc/REMOTE_CONTROL.rst>`_
+- **Architecture**: `doc/ARCHITECTURE.rst <doc/ARCHITECTURE.rst>`_
+- **Building Documentation**: `doc/BUILDING_DOCS.rst <doc/BUILDING_DOCS.rst>`_
+
 Battery Profiles
 ----------------
 

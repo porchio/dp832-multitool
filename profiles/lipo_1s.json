@@ -1,6 +1,3 @@
-# SPDX-License-Identifier: GPL-2.0-or-later
-# Copyright (C) 2025 Marcus Folkesson
-
 {
   "name": "LiPo 1S",
   "channel": 3,
