@@ -336,7 +336,8 @@ fn simulate_channel(
     let ch_idx = (profile.channel - 1) as usize;
     let ch_name = format!("CH{}", profile.channel);
     
-    // Initialize channel - only switch channel when needed (for settings)
+    // Initialize channel - select it once at the start
+    // Since each channel has its own TCP connection, this selection persists
     log_scpi!(state, writers, "CH{} → INST:NSEL {}", profile.channel, profile.channel);
     send(&mut stream, &format!("INST:NSEL {}", profile.channel));
     
@@ -368,10 +369,10 @@ fn simulate_channel(
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        // Query current using channel-specific command (no channel switching needed)
-        let curr_cmd = format!(":MEAS:CURR? {}", ch_name);
-        log_scpi!(state, writers, "{} → {}", ch_name, curr_cmd);
-        let curr_str = query(&mut stream, &curr_cmd);
+        // Query current - no channel parameter needed since channel was selected at init
+        // Each thread has its own TCP connection, so the channel selection persists
+        log_scpi!(state, writers, "{} → MEAS:CURR?", ch_name);
+        let curr_str = query(&mut stream, "MEAS:CURR?");
         log_scpi!(state, writers, "{} ← {}", ch_name, curr_str.trim());
         
         // Check for error responses before parsing
@@ -438,11 +439,9 @@ fn simulate_channel(
             v_filt = profile.max_voltage;
         }
 
-        // Set voltage - only if it has changed significantly (reduces SCPI traffic and Command errors)
+        // Set voltage - only if it has changed significantly (reduces SCPI traffic)
+        // No need to re-select channel since it was selected at init and persists on this connection
         if (v_filt - last_voltage_set).abs() > VOLTAGE_CHANGE_THRESHOLD {
-            log_scpi!(state, writers, "{} → INST:NSEL {}", ch_name, profile.channel);
-            send(&mut stream, &format!("INST:NSEL {}", profile.channel));
-            
             let volt_cmd = format!("VOLT {:.3}", v_filt);
             log_scpi!(state, writers, "{} → {}", ch_name, volt_cmd);
             send(&mut stream, &volt_cmd);
