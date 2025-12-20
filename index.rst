@@ -1,7 +1,12 @@
-DP832 Battery Simulator - Documentation Index
-==============================================
+DP832 Multitool - Documentation Index
+=====================================
 
-Welcome to the DP832 Battery Simulator documentation.
+Welcome to the DP832 Multitool documentation.
+
+This toolkit provides comprehensive tools for the Rigol DP832 power supply:
+
+- **Battery Simulator** - Real-time battery behavior simulation
+- **Remote Control** - Complete remote interface for all PSU functions
 
 Main Documentation
 ------------------
@@ -11,6 +16,8 @@ Main Documentation
 
    README
    QUICK_START
+   ARCHITECTURE
+   MIGRATION
    PROJECT_STATUS
    DEVELOPMENT_SUMMARY
 
@@ -21,8 +28,10 @@ New users should start with:
 
 1. :doc:`README` - Complete user guide and feature documentation
 2. :doc:`QUICK_START` - Quick start guide for immediate usage
-3. :doc:`examples/README` - Example configurations
-4. :doc:`profiles/README` - Battery chemistry profiles
+3. :doc:`ARCHITECTURE` - Project structure and design
+4. :doc:`MIGRATION` - Migration guide from single-tool version
+5. :doc:`examples/README` - Example configurations
+6. :doc:`profiles/README` - Battery chemistry profiles
 
 Project Information
 -------------------
@@ -57,16 +66,25 @@ Installation
 Basic Usage
 ~~~~~~~~~~~
 
+**Battery Simulator:**
+
 .. code-block:: bash
 
    # Single channel
-   dp832_battery_sim --ip 192.168.1.100 -p profiles/lifepo4.json
+   battery-sim --ip 192.168.1.100 -p profiles/lifepo4.json
 
    # Three channels
-   dp832_battery_sim --ip 192.168.1.100 \
+   battery-sim --ip 192.168.1.100 \
      -p profiles/lifepo4.json \
      -p profiles/liion_18650.json \
      -p profiles/lipo_1s.json
+
+**Remote Control:**
+
+.. code-block:: bash
+
+   # Connect and control PSU
+   remote-control --ip 192.168.1.100
 
 Features
 --------
@@ -136,8 +154,9 @@ Contributions welcome! Areas of interest:
 
 - Additional battery chemistry profiles
 - More sophisticated battery models (thermal effects, aging)
-- Remote monitoring/control interface
+- Additional tools (data logger, calibration, etc.)
 - Additional power supply models
+- Documentation improvements
 
 License
 -------
