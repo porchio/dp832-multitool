@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: GPL-2.0-only
-# Copyright (C) 2024 Marcus Hoffmann
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2025 Marcus Folkesson
 
 # Configuration file for the Sphinx documentation builder.
 #
@@ -10,8 +10,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'DP832 Battery Simulator'
-copyright = '2024, DP832 Battery Simulator Contributors'
-author = 'DP832 Battery Simulator Contributors'
+copyright = '2025, Marcus Folkesson'
+author = 'Marcus Folkesson'
 release = '1.0.0'
 
 # -- General configuration ---------------------------------------------------

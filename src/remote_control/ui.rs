@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-only
-// Copyright (C) 2024 Marcus Hoffmann
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2025 Marcus Folkesson
 
 /// Remote Control UI for DP832
 
