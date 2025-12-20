@@ -136,6 +136,8 @@ Using Configuration File
 Remote Control Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
+A complete remote control interface for the DP832 power supply with real-time monitoring and control of all channels.
+
 Basic Usage
 ^^^^^^^^^^^
 
@@ -150,20 +152,35 @@ With Configuration File
 
    remote-control --config config.toml
 
-**Controls:**
+**Keyboard Controls:**
 
 - **↑/↓**: Select channel
 - **V**: Edit voltage setpoint
 - **C**: Edit current setpoint  
-- **O**: Toggle output on/off
+- **SPACE**: Toggle output on/off for selected channel
+- **A**: Enable all channels at once
+- **R**: Refresh measurements
+- **L**: Clear event log window
+- **S**: Clear SCPI command log window
 - **Q**: Quit
 
-The interface displays:
+**The interface displays:**
 
-- Real-time voltage and current measurements
+- Real-time voltage and current measurements per channel
 - Set values vs. actual values
 - Power consumption per channel
-- Output status (ON/OFF)
+- Output status (ON/OFF) with visual indicators
+- Event log for runtime messages (also saved to ``logs/event_*.log``)
+- SCPI command log for debugging (also saved to ``logs/scpi_*.log``)
+
+**Features:**
+
+- Visual table-based interface with color-coded status
+- Selected channel highlighting
+- Live editing of voltage and current values
+- Persistent log files for troubleshooting
+- Auto-scrolling log windows
+- Efficient communication - only switches channels when necessary
 
 Configuration
 -------------

@@ -16,6 +16,7 @@ Main Documentation
 
    README
    QUICK_START
+   REMOTE_CONTROL
    ARCHITECTURE
    MIGRATION
    PROJECT_STATUS
@@ -28,10 +29,11 @@ New users should start with:
 
 1. :doc:`README` - Complete user guide and feature documentation
 2. :doc:`QUICK_START` - Quick start guide for immediate usage
-3. :doc:`ARCHITECTURE` - Project structure and design
-4. :doc:`MIGRATION` - Migration guide from single-tool version
-5. :doc:`examples/README` - Example configurations
-6. :doc:`profiles/README` - Battery chemistry profiles
+3. :doc:`REMOTE_CONTROL` - Remote control interface guide
+4. :doc:`ARCHITECTURE` - Project structure and design
+5. :doc:`MIGRATION` - Migration guide from single-tool version
+6. :doc:`examples/README` - Example configurations
+7. :doc:`profiles/README` - Battery chemistry profiles
 
 Project Information
 -------------------

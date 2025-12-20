@@ -1,5 +1,5 @@
-DP832 Battery Simulator - Quick Start Guide
-============================================
+DP832 Multitool - Quick Start Guide
+====================================
 
 Installation
 ------------
@@ -13,38 +13,121 @@ Installation
    # Build release version
    cargo build --release
 
-Basic Usage
------------
+The binaries will be in:
 
-Single Channel
+- ``target/release/battery-sim`` - Battery simulator
+- ``target/release/remote-control`` - Remote control interface
+
+Tools
+-----
+
+Remote Control
 ~~~~~~~~~~~~~~
+
+Interactive terminal interface for complete control of the DP832 power supply.
+
+Basic Usage
+^^^^^^^^^^^
 
 .. code-block:: bash
 
-   cargo run --release -- --ip 192.168.1.140 -p profiles/lifepo4.json
+   remote-control --ip 192.168.1.140
+
+With Configuration File
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+   remote-control --config config.toml
+
+Keyboard Controls
+^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Key
+     - Action
+   * - ``↑/↓``
+     - Select channel
+   * - ``V``
+     - Edit voltage setpoint
+   * - ``C``
+     - Edit current setpoint
+   * - ``SPACE``
+     - Toggle output on/off
+   * - ``A``
+     - Enable all channels
+   * - ``R``
+     - Refresh measurements
+   * - ``L``
+     - Clear event log
+   * - ``S``
+     - Clear SCPI log
+   * - ``Q``
+     - Quit
+
+**See** :doc:`REMOTE_CONTROL` **for complete remote control documentation.**
+
+Battery Simulator
+~~~~~~~~~~~~~~~~~
+
+Real-time battery simulation with advanced modeling.
+
+Basic Usage
+^^^^^^^^^^^
+
+Single Channel
+^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+   battery-sim --ip 192.168.1.140 -p profiles/lifepo4.json
 
 Multiple Channels
-~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
    # Three different battery chemistries
-   cargo run --release -- --ip 192.168.1.140 \
+   battery-sim --ip 192.168.1.140 \
      -p profiles/lifepo4.json \
      -p profiles/liion_18650.json \
      -p profiles/lipo_1s.json
 
 With Configuration File
-~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
-   cargo run --release -- --config examples/three_channels.toml \
+   battery-sim --config examples/three_channels.toml \
      -p profiles/lifepo4.json \
      -p profiles/liion_18650.json
 
-Available Battery Profiles
---------------------------
+Keyboard Controls
+^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Key
+     - Action
+   * - ``q``
+     - Quit the application
+   * - ``r``
+     - Reset all SoC values to 100%
+   * - ``l``
+     - Clear event log window
+   * - ``s``
+     - Clear SCPI command log window
+
+Configuration
+-------------
+
+Battery Profiles
+~~~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
@@ -98,10 +181,17 @@ Keyboard Controls
      - Clear SCPI command log window
 
 Configuration Options
----------------------
+~~~~~~~~~~~~~~~~~~~~~
 
-Command Line Arguments
-~~~~~~~~~~~~~~~~~~~~~~
+Remote Control
+^^^^^^^^^^^^^^
+
+- ``--ip <IP>`` - DP832 IP address (default: 192.168.1.100)
+- ``--port <PORT>`` - SCPI port (default: 5555)
+- ``--config <FILE>`` - TOML configuration file
+
+Battery Simulator
+^^^^^^^^^^^^^^^^^
 
 - ``--ip <IP>`` - DP832 IP address (default: 192.168.1.100)
 - ``--port <PORT>`` - SCPI port (default: 5555)

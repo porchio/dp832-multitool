@@ -111,10 +111,14 @@ Located in ``src/remote_control/``, provides full PSU remote control:
 
 - Interactive terminal interface with:
   
-  - Channel selection
-  - Live measurements display
-  - Interactive editing
-  - Real-time updates
+  - Visual table-based layout with color coding
+  - Channel selection and highlighting
+  - Live measurements display (voltage, current, power)
+  - Interactive editing of voltage and current
+  - Output status indicators
+  - Dual log windows (events and SCPI)
+  - Auto-scrolling logs
+  - Keyboard-driven controls
 
 Communication Architecture
 --------------------------
@@ -143,7 +147,21 @@ This architecture eliminates the "Command error" issues that occurred when multi
 Remote Control
 ~~~~~~~~~~~~~~
 
-The remote control uses a **single TCP connection** with explicit channel selection before each operation. This is appropriate since operations are serialized through the UI thread.
+The remote control uses a **single TCP connection** with optimized channel management to minimize communication overhead.
+
+**Key optimizations:**
+
+1. **Avoids channel switching** - Uses explicit channel parameters in commands
+   
+   - ``MEAS:VOLT? CH1`` instead of switching to CH1 then ``MEAS:VOLT?``
+   - ``APPL CH1,3.3,2.0`` to set voltage/current without switching
+   - ``OUTP? CH1`` to read output state without switching
+
+2. **Batched updates** - Reads all channel states periodically (every 2 seconds) instead of continuously
+3. **Immediate feedback** - Updates single channel after user changes
+4. **SCPI logging** - All commands sent to PSU are logged to both UI and file
+
+This approach eliminates unnecessary ``INST:NSEL`` commands and prevents race conditions while maintaining responsive user interaction.
 
 Key Design Decisions
 --------------------
