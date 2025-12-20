@@ -369,10 +369,10 @@ fn simulate_channel(
         let dt = now.duration_since(last).as_secs_f64();
         last = now;
 
-        // Query current - no channel parameter needed since channel was selected at init
-        // Each thread has its own TCP connection, so the channel selection persists
-        log_scpi!(state, writers, "{} → MEAS:CURR?", ch_name);
-        let curr_str = query(&mut stream, "MEAS:CURR?");
+        // Query current using channel-specific syntax (more reliable than relying on INST:NSEL)
+        let curr_cmd = format!("MEAS:CURR? {}", ch_name);
+        log_scpi!(state, writers, "{} → {}", ch_name, curr_cmd);
+        let curr_str = query(&mut stream, &curr_cmd);
         log_scpi!(state, writers, "{} ← {}", ch_name, curr_str.trim());
         
         // Check for error responses before parsing
