@@ -58,6 +58,27 @@ Remote Control
 How to Capture Screenshots
 ---------------------------
 
+Using the Capture Script (Recommended)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A helper script is provided to simplify screenshot capture:
+
+.. code-block:: bash
+
+   # Interactive mode - will prompt for screenshot name
+   ./screenshots/capture.sh
+
+   # Direct mode - specify screenshot name
+   ./screenshots/capture.sh battery-sim-three-channels
+
+The script will:
+
+- Auto-detect available screenshot tools (gnome-screenshot, scrot, or import)
+- Provide a 5-second countdown
+- Save the screenshot with correct naming
+- Display file information
+- Show commands to view and commit the screenshot
+
 Using Terminal Screenshot Tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -36,6 +36,20 @@ Remote Control
 Quick Capture Instructions
 ---------------------------
 
+**Using the Helper Script (Easiest):**
+
+.. code-block:: bash
+
+   # Run the interactive capture script
+   ./screenshots/capture.sh battery-sim-three-channels
+   
+   # Or use interactive mode
+   ./screenshots/capture.sh
+
+The script will guide you through the capture process.
+
+**Manual Capture:**
+
 1. Build the project:
    
    .. code-block:: bash
