@@ -66,6 +66,7 @@ impl DP832Controller {
     }
     
     /// Update measurements for a specific channel
+    /// This function does NOT switch the active channel on the PSU
     pub fn update_channel(&mut self, channel: u8) -> Result<(), std::io::Error> {
         let ch_idx = (channel - 1) as usize;
         if ch_idx >= 3 {
@@ -94,17 +95,18 @@ impl DP832Controller {
         let out_str = query(&mut self.stream, &format!("OUTP? {}", ch_name));
         self.channels[ch_idx].enabled = out_str.trim() == "ON";
         
-        // Read voltage and current setpoints (requires channel switch)
-        // Only switch channel once for both setpoint reads
-        send(&mut self.stream, &format!("INST:NSEL {}", channel));
-        let v_set_str = query(&mut self.stream, "VOLT?");
-        if let Ok(v) = v_set_str.trim().parse::<f64>() {
-            self.channels[ch_idx].voltage_set = v;
-        }
-        
-        let i_set_str = query(&mut self.stream, "CURR?");
-        if let Ok(i) = i_set_str.trim().parse::<f64>() {
-            self.channels[ch_idx].current_set = i;
+        // Read voltage and current setpoints using APPL? command
+        // This avoids switching the active channel on the PSU
+        // APPL? returns format: "CH1,3.300,2.000,ON" or similar
+        let appl_str = query(&mut self.stream, &format!("APPL? {}", ch_name));
+        let parts: Vec<&str> = appl_str.split(',').collect();
+        if parts.len() >= 3 {
+            if let Ok(v) = parts[1].trim().parse::<f64>() {
+                self.channels[ch_idx].voltage_set = v;
+            }
+            if let Ok(i) = parts[2].trim().parse::<f64>() {
+                self.channels[ch_idx].current_set = i;
+            }
         }
         
         Ok(())
