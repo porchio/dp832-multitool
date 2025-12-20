@@ -3,6 +3,14 @@ name = "dp832_battery_sim"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "battery-sim"
+path = "src/bin/battery-sim.rs"
+
+[[bin]]
+name = "remote-control"
+path = "src/bin/remote-control.rs"
+
 [dependencies]
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }

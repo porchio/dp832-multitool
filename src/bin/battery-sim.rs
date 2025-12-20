@@ -1,9 +1,13 @@
-mod ui;
+/// DP832 Battery Simulator
+/// 
+/// Simulates realistic battery behavior on the Rigol DP832 power supply
 
 use clap::Parser;
-use serde::Deserialize;
+use dp832_battery_sim::battery_sim::{BatteryProfile, Config, interpolate_ocv};
+use dp832_battery_sim::common::{LogWriters, RuntimeState};
+use dp832_battery_sim::scpi::{send, query};
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
@@ -36,6 +40,8 @@ macro_rules! log_scpi {
 }
 
 #[derive(Parser)]
+#[command(name = "dp832-battery-sim")]
+#[command(about = "Battery simulator for Rigol DP832 power supply")]
 struct Args {
     /// Config file (TOML)
     #[arg(long)]
@@ -58,143 +64,10 @@ struct Args {
     log: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct OcvPoint {
-    soc: f64,
-    voltage: f64,
-}
-
-#[derive(Debug, Deserialize)]
-struct BatteryProfile {
-    name: String,
-    channel: u8,
-
-    capacity_ah: f64,
-    internal_resistance_ohm: f64,
-
-    current_limit_discharge_a: f64,
-    current_limit_charge_a: f64,
-
-    cutoff_voltage: f64,
-    max_voltage: f64,
-
-    rc_time_constant_ms: u64,
-    update_interval_ms: u64,
-
-    ocv_curve: Vec<OcvPoint>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct Config {
-    device: Option<DeviceConfig>,
-    battery: Option<BatteryConfig>,
-    logging: Option<LoggingConfig>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DeviceConfig {
-    ip: String,
-    port: Option<u16>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BatteryConfig {
-    profile: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct LoggingConfig {
-    csv: Option<String>,
-}
-
-fn load_config(path: &str) -> Config {
-    let mut s = String::new();
-    std::fs::File::open(path)
-        .unwrap()
-        .read_to_string(&mut s)
-        .unwrap();
-    toml::from_str(&s).expect("Invalid config file")
-}
-
-fn default_config_path() -> Option<std::path::PathBuf> {
-    let base = dirs_next::config_dir()?;
-    Some(base.join("dp832-battery").join("config.toml"))
-}
-
-fn load_optional_config(path: Option<&str>) -> Config {
-    let path = if let Some(p) = path {
-        Some(std::path::PathBuf::from(p))
-    } else {
-        default_config_path()
-    };
-
-    if let Some(path) = path {
-        if path.exists() {
-            println!("Using config file: {}", path.display());
-            let mut s = String::new();
-            std::fs::File::open(path)
-                .unwrap()
-                .read_to_string(&mut s)
-                .unwrap();
-            toml::from_str(&s).expect("Invalid config file")
-        } else {
-            Config::default()
-        }
-    } else {
-        Config::default()
-    }
-}
-
-/* ---------------- SCPI helpers ---------------- */
-
-fn send(stream: &mut TcpStream, cmd: &str) {
-    let cmd = format!("{}\n", cmd);
-    stream.write_all(cmd.as_bytes()).unwrap();
-}
-
-fn query(stream: &mut TcpStream, cmd: &str) -> String {
-    send(stream, cmd);
-    let mut resp = Vec::new();
-    let mut buf = [0u8; 64];
-
-    loop {
-        match stream.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                resp.extend_from_slice(&buf[..n]);
-                if resp.ends_with(b"\n") {
-                    break;
-                }
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-            Err(e) => panic!("{}", e),
-        }
-    }
-
-    String::from_utf8_lossy(&resp).trim().to_string()
-}
-
-/* ---------------- Battery model ---------------- */
-
-fn interpolate_ocv(curve: &[OcvPoint], soc: f64) -> f64 {
-    let soc = soc.clamp(0.0, 1.0);
-
-    for w in curve.windows(2) {
-        if soc <= w[0].soc && soc >= w[1].soc {
-            let t = (soc - w[1].soc) / (w[0].soc - w[1].soc);
-            return w[1].voltage + t * (w[0].voltage - w[1].voltage);
-        }
-    }
-
-    curve.last().unwrap().voltage
-}
-
-/* ---------------- Main ---------------- */
-
 fn main() {
     let args = Args::parse();
 
-    let cfg = load_optional_config(args.config.as_deref());
+    let cfg: Config = dp832_battery_sim::common::load_optional_config(args.config.as_deref());
     
     // Resolve IP
     let ip = args
@@ -263,7 +136,7 @@ fn main() {
     println!("{}", query(&mut stream, "*IDN?"));
 
     // Initialize shared state
-    let state = Arc::new(Mutex::new(ui::RuntimeState {
+    let state = Arc::new(Mutex::new(RuntimeState {
         channels: Default::default(),
         running: true,
         log_messages: Default::default(),
@@ -271,7 +144,7 @@ fn main() {
     }));
 
     // Initialize log writers
-    let writers = Arc::new(Mutex::new(ui::LogWriters::new()));
+    let writers = Arc::new(Mutex::new(LogWriters::new()));
 
     // Set up each channel
     for profile in &profiles {
@@ -288,7 +161,7 @@ fn main() {
     let tui_state = state.clone();
     let addr_clone = addr.clone();
     std::thread::spawn(move || {
-        ui::run_tui(tui_state, addr_clone);
+        dp832_battery_sim::battery_sim::ui::run_tui(tui_state, addr_clone);
     });
 
     // Start simulation threads for each channel
@@ -327,8 +200,8 @@ fn main() {
 }
 
 fn simulate_channel(
-    state: Arc<Mutex<ui::RuntimeState>>,
-    writers: Arc<Mutex<ui::LogWriters>>,
+    state: Arc<Mutex<RuntimeState>>,
+    writers: Arc<Mutex<LogWriters>>,
     mut stream: TcpStream,
     profile: BatteryProfile,
     mut csv: Option<csv::Writer<File>>,

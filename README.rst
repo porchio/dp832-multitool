@@ -1,7 +1,18 @@
-DP832 Battery Simulator
-=======================
+DP832 Multitool
+===============
 
-A real-time battery simulator for the Rigol DP832 power supply unit. Simulates realistic battery behavior including voltage-current characteristics, state of charge (SoC), internal resistance, and discharge curves based on battery chemistry profiles.
+A comprehensive toolkit for the Rigol DP832 power supply unit, featuring:
+
+1. **Battery Simulator**: Real-time battery simulation with advanced modeling
+2. **Remote Control Interface**: Complete remote control of all PSU functions
+
+Tools
+-----
+
+Battery Simulator
+~~~~~~~~~~~~~~~~~
+
+A real-time battery simulator that simulates realistic battery behavior including voltage-current characteristics, state of charge (SoC), internal resistance, and discharge curves based on battery chemistry profiles.
 
 Features
 --------
@@ -78,27 +89,33 @@ Build from source
    cd dp832-battery-sim
    cargo build --release
 
-The binary will be in ``target/release/dp832_battery_sim``.
+The binaries will be in:
+
+- ``target/release/battery-sim`` - Battery simulator
+- ``target/release/remote-control`` - Remote control interface
 
 Quick Start
 -----------
 
+Battery Simulator
+~~~~~~~~~~~~~~~~~
+
 Single Channel Example
-~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
-   dp832_battery_sim \
+   battery-sim \
      --ip 192.168.1.100 \
      --port 5555 \
      -p profiles/lifepo4.json
 
 Three Channel Example
-~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
-   dp832_battery_sim \
+   battery-sim \
      --ip 192.168.1.100 \
      --port 5555 \
      -p profiles/lifepo4.json \
@@ -106,15 +123,47 @@ Three Channel Example
      -p profiles/lipo_1s.json
 
 Using Configuration File
-~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
-   dp832_battery_sim \
+   battery-sim \
      --config examples/three_channels.toml \
      -p profiles/lifepo4.json \
      -p profiles/liion_18650.json \
      -p profiles/lipo_1s.json
+
+Remote Control Interface
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Basic Usage
+^^^^^^^^^^^
+
+.. code-block:: bash
+
+   remote-control --ip 192.168.1.100
+
+With Configuration File
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+   remote-control --config config.toml
+
+**Controls:**
+
+- **↑/↓**: Select channel
+- **V**: Edit voltage setpoint
+- **C**: Edit current setpoint  
+- **O**: Toggle output on/off
+- **Q**: Quit
+
+The interface displays:
+
+- Real-time voltage and current measurements
+- Set values vs. actual values
+- Power consumption per channel
+- Output status (ON/OFF)
 
 Configuration
 -------------

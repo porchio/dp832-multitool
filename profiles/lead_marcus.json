@@ -1,0 +1,31 @@
+{
+  "name": "Lead Acid 6V",
+  "channel": 2,
+
+  "capacity_ah": 0.5,
+  "internal_resistance_ohm": 0.100,
+
+  "current_limit_discharge_a": 1.0,
+  "current_limit_charge_a": 0.45,
+
+  "cutoff_voltage": 5.25,
+  "max_voltage": 7.2,
+
+  "rc_time_constant_ms": 500,
+
+  "update_interval_ms": 100,
+
+  "ocv_curve": [
+    { "soc": 1.00, "voltage": 6.40 },
+    { "soc": 0.90, "voltage": 6.30 },
+    { "soc": 0.80, "voltage": 6.25 },
+    { "soc": 0.70, "voltage": 6.20 },
+    { "soc": 0.60, "voltage": 6.15 },
+    { "soc": 0.50, "voltage": 6.10 },
+    { "soc": 0.40, "voltage": 6.00 },
+    { "soc": 0.30, "voltage": 5.90 },
+    { "soc": 0.20, "voltage": 5.75 },
+    { "soc": 0.10, "voltage": 5.60 },
+    { "soc": 0.00, "voltage": 5.40 }
+  ]
+}
