@@ -4,7 +4,7 @@
 /// Remote Control UI for DP832
 
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -117,6 +117,9 @@ impl RemoteControlUI {
             // Check for user input with shorter timeout for responsiveness
             if event::poll(Duration::from_millis(100))? {
                 if let Event::Key(key) = event::read()? {
+			if key.kind != KeyEventKind::Press {
+        continue;
+    }
                     match &self.input_mode {
                         InputMode::Normal => {
                             match key.code {
